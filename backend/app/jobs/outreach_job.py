@@ -112,7 +112,7 @@ async def _run_real_outreach(
         # run_name must NOT contain contact_name or prospect email (CLAUDE.md rule #5).
         # We use a generic identifier so LangSmith traces are PII-free.
         langsmith_config = {
-            "recursion_limit": 10,
+            "recursion_limit": 25,
             "run_name": f"outreach-job-{job_id[:8]}",
             "tags": ["outreach"],
         }

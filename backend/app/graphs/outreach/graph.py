@@ -202,9 +202,11 @@ async def research_node(state: OutreachState) -> dict:
             "   stage, industry, and growth trajectory.\n\n"
             "Use the web_search tool for broad discovery. Use scrape_website on the "
             "company homepage or a specific page when you need deeper detail.\n\n"
-            "IMPORTANT: Call web_search at most TWICE per research session. "
-            "Do not loop endlessly — when you have enough data, produce your "
-            "final research summary as plain text."
+            "IMPORTANT:\n"
+            "- Call ONE tool at a time — never batch multiple tool calls in a single turn.\n"
+            "- Call web_search at most ONCE. If you need more detail, call scrape_website ONCE.\n"
+            "- After at most 2 tool calls total, produce your final research summary as plain text.\n"
+            "- Do not loop further once you have enough data."
         )
     )
 
