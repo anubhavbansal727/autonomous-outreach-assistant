@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   redis:
     image: redis:7-alpine
@@ -33,7 +33,7 @@ services:
       timeout: 3s
       retries: 10
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
   # -----------------------------------------------------------------------
   # Backend API (256 MB — no Playwright)
