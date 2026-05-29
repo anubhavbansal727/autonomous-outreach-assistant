@@ -16,8 +16,6 @@ class WorkerSettings:
 
 
 if __name__ == "__main__":
-    import asyncio
+    from arq.cli import run_worker
 
-    from arq import run_worker
-
-    asyncio.run(run_worker(WorkerSettings))
+    run_worker(WorkerSettings)
