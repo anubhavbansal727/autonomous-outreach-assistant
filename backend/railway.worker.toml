@@ -1,0 +1,18 @@
+# Railway service configuration for the ARQ worker service.
+# Deploy as a SEPARATE Railway service from the API — worker needs 512 MB RAM
+# for Playwright (Chromium). API only needs 256 MB.
+#
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[build.args]
+INSTALL_PLAYWRIGHT = "true"
+
+[deploy]
+startCommand = "uv run python worker.py"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+# Same env vars as the API service plus:
+# MOCK_MODE = true   (optional — bypasses LLM calls in dev/demo)

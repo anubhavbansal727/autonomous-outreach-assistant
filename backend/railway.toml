@@ -1,0 +1,30 @@
+# Railway service configuration for the API service.
+# The worker service is a separate Railway service — see technical_spec.md §12.
+#
+# Build settings
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+dockerBuildTarget = ""
+
+[build.args]
+INSTALL_PLAYWRIGHT = "false"
+
+# Deploy settings
+[deploy]
+startCommand = "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Required env vars (set via Railway dashboard or railway CLI):
+# DATABASE_URL       — Railway Postgres plugin injects this automatically
+# REDIS_URL          — Railway Redis plugin injects this automatically
+# JWT_SECRET_KEY     — generate with: openssl rand -hex 32
+# OPENAI_API_KEY
+# SERPER_API_KEY
+# RESEND_API_KEY
+# LANGCHAIN_API_KEY  (optional — enables LangSmith tracing)
+# LANGCHAIN_TRACING_V2 = true
+# LANGCHAIN_PROJECT  = mini-crm-ai-crew
