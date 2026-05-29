@@ -1,8 +1,16 @@
+import logging
+
 from arq.connections import RedisSettings
 
 from app.config import settings
 from app.jobs.ingestion_job import run_ingestion_job
 from app.jobs.outreach_job import run_outreach_job
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 
 class WorkerSettings:
@@ -16,6 +24,6 @@ class WorkerSettings:
 
 
 if __name__ == "__main__":
-    from arq.cli import run_worker
+    from arq.worker import run_worker
 
     run_worker(WorkerSettings)
