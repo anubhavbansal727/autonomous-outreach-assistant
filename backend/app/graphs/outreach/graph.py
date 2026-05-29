@@ -42,6 +42,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.tools.crm import get_crm_pipeline
 from app.tools.scrape import scrape_website
 from app.tools.search import web_search
@@ -128,36 +129,36 @@ _schedule_extract_llm = None
 def _get_research_llm():
     global _research_llm_with_tools
     if _research_llm_with_tools is None:
-        _research_llm_with_tools = ChatOpenAI(model="gpt-4o", temperature=0.1).bind_tools(
-            [web_search, scrape_website]
-        )
+        _research_llm_with_tools = ChatOpenAI(
+            model="gpt-4o", temperature=0.1, api_key=settings.OPENAI_API_KEY
+        ).bind_tools([web_search, scrape_website])
     return _research_llm_with_tools
 
 
 def _get_personalize_llm():
     global _personalize_llm
     if _personalize_llm is None:
-        _personalize_llm = ChatOpenAI(model="gpt-4o", temperature=0.7).with_structured_output(
-            OutreachDraftOutput
-        )
+        _personalize_llm = ChatOpenAI(
+            model="gpt-4o", temperature=0.7, api_key=settings.OPENAI_API_KEY
+        ).with_structured_output(OutreachDraftOutput)
     return _personalize_llm
 
 
 def _get_schedule_llm():
     global _schedule_llm_with_tools
     if _schedule_llm_with_tools is None:
-        _schedule_llm_with_tools = ChatOpenAI(model="gpt-4o", temperature=0.1).bind_tools(
-            [get_crm_pipeline]
-        )
+        _schedule_llm_with_tools = ChatOpenAI(
+            model="gpt-4o", temperature=0.1, api_key=settings.OPENAI_API_KEY
+        ).bind_tools([get_crm_pipeline])
     return _schedule_llm_with_tools
 
 
 def _get_schedule_extract_llm():
     global _schedule_extract_llm
     if _schedule_extract_llm is None:
-        _schedule_extract_llm = ChatOpenAI(model="gpt-4o", temperature=0.0).with_structured_output(
-            ScheduleOutput
-        )
+        _schedule_extract_llm = ChatOpenAI(
+            model="gpt-4o", temperature=0.0, api_key=settings.OPENAI_API_KEY
+        ).with_structured_output(ScheduleOutput)
     return _schedule_extract_llm
 
 

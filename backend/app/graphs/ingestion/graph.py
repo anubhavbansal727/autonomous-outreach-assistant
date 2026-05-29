@@ -29,6 +29,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
+from app.config import settings
 from .state import IngestionState, ScrapedPage
 
 
@@ -60,9 +61,9 @@ _extract_llm = None
 def _get_extract_llm() -> ChatOpenAI:
     global _extract_llm
     if _extract_llm is None:
-        _extract_llm = ChatOpenAI(model="gpt-4o", temperature=0.2).with_structured_output(
-            ProductProfileOutput
-        )
+        _extract_llm = ChatOpenAI(
+            model="gpt-4o", temperature=0.2, api_key=settings.OPENAI_API_KEY
+        ).with_structured_output(ProductProfileOutput)
     return _extract_llm
 
 
