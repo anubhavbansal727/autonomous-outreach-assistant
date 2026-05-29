@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 # script is run from the backend/ directory via `python scripts/seed_demo.py`.
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,16 +39,14 @@ DEMO_PASSWORD = "Demo1234!"
 
 FIXTURES_DIR = pathlib.Path(__file__).parent.parent / "fixtures"
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _hash(password: str) -> str:
-    return _pwd_ctx.hash(password)
+    """Hash password with bcrypt directly (avoids passlib/bcrypt>=4 compat issue)."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def _load_json(name: str) -> dict | list:
