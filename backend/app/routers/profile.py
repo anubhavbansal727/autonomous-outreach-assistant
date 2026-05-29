@@ -45,7 +45,7 @@ async def ingest(
 
     # Rate limit: 10 ingest requests per hour per user
     allowed, retry_after = await check_rate_limit(
-        pool.client,  # redis client from the arq pool
+        pool,  # arq pool is itself an async Redis client
         f"ingest:{current_user.id}",
         limit=10,
         window=3600,

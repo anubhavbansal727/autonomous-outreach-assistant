@@ -101,7 +101,7 @@ async def generate(
     pool = await get_arq_pool()
 
     allowed, retry_after = await check_rate_limit(
-        pool.client,
+        pool,
         f"outreach:{current_user.id}",
         limit=10,
         window=3600,
@@ -309,7 +309,7 @@ async def retry(
     pool = await get_arq_pool()
 
     allowed, retry_after = await check_rate_limit(
-        pool.client,
+        pool,
         f"outreach:{current_user.id}",
         limit=10,
         window=3600,
