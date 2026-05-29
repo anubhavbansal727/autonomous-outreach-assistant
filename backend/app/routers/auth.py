@@ -1,8 +1,8 @@
 import uuid
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +24,6 @@ from app.models.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 REFRESH_COOKIE = "refresh_token"
 COOKIE_OPTS = dict(
@@ -51,7 +50,7 @@ async def register(
 
     user = User(
         email=body.email,
-        password_hash=pwd_context.hash(body.password),
+        password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
     )
     db.add(user)
     await db.flush()
@@ -74,7 +73,7 @@ async def login(
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not pwd_context.verify(body.password, user.password_hash):
+    if user is None or not bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "Invalid email or password", "code": "INVALID_CREDENTIALS"},

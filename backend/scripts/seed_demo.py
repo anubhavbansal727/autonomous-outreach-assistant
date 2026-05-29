@@ -75,8 +75,9 @@ async def _upsert_user(db: AsyncSession) -> User:
         await db.flush()
         print(f"  Created user: {DEMO_EMAIL}")
     else:
+        user.password_hash = _hash(DEMO_PASSWORD)
         user.resend_domain = "datapulse.io"
-        print(f"  Found existing user: {DEMO_EMAIL}")
+        print(f"  Updated existing user: {DEMO_EMAIL}")
     return user
 
 
