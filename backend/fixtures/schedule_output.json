@@ -1,0 +1,7 @@
+{
+  "send_at": "2026-06-03T09:30:00-05:00",
+  "channel": "email",
+  "recommended_window": "Tuesday 9:30-10am CT",
+  "flag_for_human": false,
+  "reason": "Prospect not found in CRM pipeline. Tuesday morning recommended for B2B outreach based on industry benchmarks."
+}

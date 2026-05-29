@@ -1,0 +1,25 @@
+{
+  "product_name": "DataPulse",
+  "one_liner": "Real-time revenue analytics for B2B SaaS teams",
+  "target_customer": "Revenue Operations leaders at SaaS companies with 50-500 employees",
+  "pain_points": [
+    "Manual spreadsheet reporting wastes hours each week",
+    "Data scattered across CRM, billing, and product tools",
+    "No single source of truth for ARR and churn metrics",
+    "Slow time-to-insight delays board reporting"
+  ],
+  "differentiators": [
+    "Connects to 40+ SaaS tools with one-click integrations",
+    "Pre-built RevOps dashboards ready in under 30 minutes",
+    "AI anomaly detection flags revenue risks before they escalate",
+    "No SQL or engineering support required"
+  ],
+  "case_studies": [
+    "Helped Acme HR reduce reporting time by 70% in 60 days",
+    "TechFlow scaled from $1M to $5M ARR using DataPulse pipeline health scores"
+  ],
+  "cta": "Book a 20-minute live demo",
+  "icp": "RevOps or Finance at B2B SaaS, Series A–C, 50–500 employees, using Salesforce or HubSpot",
+  "extraction_confidence": "high",
+  "missing_fields": []
+}

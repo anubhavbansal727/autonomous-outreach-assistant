@@ -1,0 +1,11 @@
+{
+  "email_subject": "How Acme Corp can cut revenue reporting time by 70%",
+  "email_body": "Hi there,\n\nI noticed Acme Corp has been growing quickly — congrats on the recent expansion into the EMEA market.\n\nAs your team scales, revenue reporting across Salesforce, billing tools, and spreadsheets tends to become a serious time sink. That's exactly the problem DataPulse was built to solve.\n\nWe connect to your existing stack in under 30 minutes and surface the ARR, churn, and pipeline health metrics your RevOps team needs — without any SQL or engineering lift. One of our customers, TechFlow, used DataPulse to scale from $1M to $5M ARR with a two-person RevOps team.\n\nWould a 20-minute demo make sense this week?\n\nBest,\n[Your Name]",
+  "linkedin_note": "Hi — I saw Acme Corp's EMEA expansion and thought DataPulse could save your RevOps team hours on revenue reporting. Happy to share how. Open to connecting?",
+  "data_confidence": "high",
+  "personalization_signals": [
+    "EMEA expansion signal",
+    "RevOps team scaling",
+    "Salesforce user inferred from job postings"
+  ]
+}

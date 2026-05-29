@@ -1,0 +1,27 @@
+{
+  "company_name": "Acme Corp",
+  "industry": "B2B SaaS / HR Tech",
+  "size": "100-250 employees",
+  "hq_location": "Chicago, IL",
+  "hq_timezone": "America/Chicago",
+  "pain_points": [
+    "Manual HR reporting",
+    "Disconnected payroll and HRIS systems",
+    "Slow headcount planning"
+  ],
+  "tech_stack": ["Salesforce", "Workday", "Slack", "Jira"],
+  "recent_news": [
+    {
+      "headline": "Acme Corp raises $12M Series B",
+      "date": "2026-02",
+      "signal_type": "funding"
+    },
+    {
+      "headline": "Acme Corp expands to EMEA",
+      "date": "2026-04",
+      "signal_type": "other"
+    }
+  ],
+  "website_url": "https://acmecorp.example.com",
+  "scrape_success": true
+}
