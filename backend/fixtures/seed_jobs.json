@@ -1,0 +1,97 @@
+[
+  {
+    "company_name": "Acme Corp",
+    "contact_name": "Sarah Chen",
+    "status": "done",
+    "send_status": "sent",
+    "data_confidence": "high",
+    "email_subject": "How Acme Corp can cut revenue reporting time by 70%",
+    "email_draft": "Hi Sarah,\n\nI noticed Acme Corp raised a $12M Series B in February and is now expanding into EMEA — congrats on the momentum.\n\nAs your RevOps team scales across regions, consolidating revenue data from Salesforce, billing tools, and spreadsheets becomes a real bottleneck. DataPulse connects to your existing stack in under 30 minutes and gives your team a live view of ARR, churn, and pipeline health — no SQL or engineering lift required.\n\nOne of our customers, TechFlow, used DataPulse to grow from $1M to $5M ARR with a two-person RevOps team.\n\nWould a 20-minute demo make sense this week?\n\nBest,\n[Your Name]",
+    "linkedin_draft": "Hi Sarah — saw Acme Corp's Series B and EMEA expansion. DataPulse helps RevOps teams like yours consolidate revenue reporting across regions without the spreadsheet chaos. Happy to share how. Open to connecting?",
+    "personalization_signals": ["$12M Series B (Feb 2026)", "EMEA expansion (Apr 2026)", "Salesforce user (job postings)"],
+    "schedule_json": {
+      "send_at": "2026-06-03T09:30:00-05:00",
+      "channel": "email",
+      "recommended_window": "Tuesday 9:30-10am CT",
+      "flag_for_human": false,
+      "reason": "Prospect not in CRM pipeline. Tuesday morning recommended for B2B SaaS outreach."
+    },
+    "resend_message_id": "re_demo_001_acme",
+    "days_ago": 12
+  },
+  {
+    "company_name": "GlobalTech Inc",
+    "contact_name": "Marcus Rivera",
+    "status": "done",
+    "send_status": "sent",
+    "data_confidence": "medium",
+    "email_subject": "Revenue visibility for GlobalTech's next growth phase",
+    "email_draft": "Hi Marcus,\n\nGlobalTech has an impressive trajectory in the enterprise middleware space. As you continue scaling, revenue reporting across multiple product lines tends to get complex fast.\n\nDataPulse is built for exactly this stage — it aggregates ARR, expansion revenue, and churn signals from your existing tools into a single dashboard your Finance and RevOps teams can actually use.\n\nWe've helped similar-stage companies cut their monthly close process from 5 days to same-day. Would it be worth a quick 20-minute call to see if there's a fit?\n\nBest,\n[Your Name]",
+    "linkedin_draft": "Hi Marcus — working with companies at GlobalTech's scale on revenue visibility. DataPulse connects your existing SaaS stack into one RevOps dashboard — no engineering required. Worth a quick chat?",
+    "personalization_signals": ["Enterprise middleware positioning", "Multi-product revenue complexity"],
+    "schedule_json": {
+      "send_at": "2026-06-04T10:00:00-06:00",
+      "channel": "email",
+      "recommended_window": "Wednesday 10-11am MT",
+      "flag_for_human": true,
+      "reason": "GlobalTech found in CRM pipeline at Demo stage — review existing relationship before sending."
+    },
+    "resend_message_id": "re_demo_002_globaltech",
+    "days_ago": 9
+  },
+  {
+    "company_name": "Nexus Payments",
+    "contact_name": "Priya Mehta",
+    "status": "done",
+    "send_status": "draft",
+    "data_confidence": "low",
+    "email_subject": "Simplifying revenue reporting for Nexus Payments",
+    "email_draft": "Hi Priya,\n\nPayments companies at Nexus's stage often wrestle with reconciling transaction revenue, subscription MRR, and churn across multiple systems — each with its own reporting format.\n\nDataPulse was designed to bring all of that into one place: real-time ARR, net revenue retention, and pipeline health in a single dashboard built for RevOps and Finance.\n\nWould you be open to a 20-minute demo to see how it fits your current reporting setup?\n\nBest,\n[Your Name]",
+    "linkedin_draft": "Hi Priya — many payments companies find revenue reporting across transaction and subscription data tricky. DataPulse consolidates it all. Open to a quick chat?",
+    "personalization_signals": ["Payments + subscription revenue complexity"],
+    "schedule_json": {
+      "send_at": "2026-06-05T09:00:00-05:00",
+      "channel": "email",
+      "recommended_window": "Thursday 9-10am CT",
+      "flag_for_human": false,
+      "reason": "Prospect not in CRM. Thursday morning selected for B2B finance audience."
+    },
+    "resend_message_id": null,
+    "days_ago": 6
+  },
+  {
+    "company_name": "Vortex Labs",
+    "contact_name": "Alex Kim",
+    "status": "done",
+    "send_status": "draft",
+    "data_confidence": "high",
+    "email_subject": "Congrats on Vortex Labs' seed round — quick thought on RevOps",
+    "email_draft": "Hi Alex,\n\nCongrats on closing the seed round — exciting to see Vortex Labs moving into the developer tooling space.\n\nAt the seed stage, tracking ARR, churn, and burn against revenue is usually done in spreadsheets — which works until it doesn't. DataPulse plugs into Stripe and HubSpot in under 30 minutes and gives your team real-time revenue metrics without the spreadsheet chaos.\n\nWe've helped several seed-stage teams get investor-ready reporting in place before their Series A. Worth a 20-minute look?\n\nBest,\n[Your Name]",
+    "linkedin_draft": "Hi Alex — congrats on the Vortex Labs seed round! DataPulse helps early-stage SaaS teams get investor-ready revenue reporting set up fast. Happy to show you how.",
+    "personalization_signals": ["Recent seed round", "Developer tooling vertical", "Pre-Series A stage"],
+    "schedule_json": {
+      "send_at": "2026-06-03T10:00:00-07:00",
+      "channel": "email",
+      "recommended_window": "Tuesday 10-11am PT",
+      "flag_for_human": false,
+      "reason": "No existing CRM entry. Tuesday morning chosen for startup audience on PT."
+    },
+    "resend_message_id": null,
+    "days_ago": 3
+  },
+  {
+    "company_name": "Prism Analytics",
+    "contact_name": "Jordan Lee",
+    "status": "failed",
+    "send_status": "draft",
+    "data_confidence": null,
+    "email_subject": null,
+    "email_draft": null,
+    "linkedin_draft": null,
+    "personalization_signals": [],
+    "schedule_json": null,
+    "resend_message_id": null,
+    "error_message": "Scraping failed: net::ERR_CONNECTION_TIMED_OUT — website unreachable after 15s timeout",
+    "days_ago": 1
+  }
+]
