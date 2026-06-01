@@ -106,8 +106,11 @@ async def _run_real_outreach(
             "avoid_messaging": product_profile.get("avoid_messaging", "") or "",
         }
 
-        last_node_name: str | None = None
-        last_event: dict = {}
+        # Accumulate all node outputs — each astream event is {node_name: node_dict}
+        # and only contains that node's return value, NOT the full graph state.
+        # We merge every node's output so final_state has all fields populated
+        # across research, personalize, schedule, and extract_schedule nodes.
+        accumulated_state: dict = {}
 
         # run_name must NOT contain contact_name or prospect email (CLAUDE.md rule #5).
         # We use a generic identifier so LangSmith traces are PII-free.
@@ -117,15 +120,18 @@ async def _run_real_outreach(
             "tags": ["outreach"],
         }
         async for event in graph.astream(initial_state, config=langsmith_config):
-            last_node_name = next(iter(event))
-            last_event = event
+            node_name = next(iter(event))
+            node_output = event[node_name]
+            # Merge node output into accumulated state (skip message lists to avoid bloat)
+            if isinstance(node_output, dict):
+                accumulated_state.update(
+                    {k: v for k, v in node_output.items() if k != "messages"}
+                )
 
-            if last_node_name in _NODE_STEP_MAP:
-                await _update_step(db, job_id, _NODE_STEP_MAP[last_node_name])
+            if node_name in _NODE_STEP_MAP:
+                await _update_step(db, job_id, _NODE_STEP_MAP[node_name])
 
-        final_state = (
-            last_event.get(last_node_name, {}) if last_node_name else {}
-        )
+        final_state = accumulated_state
 
         # Convert float confidence to the DB enum tier
         raw_confidence = final_state.get("data_confidence", 0.0)
