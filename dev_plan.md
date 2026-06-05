@@ -17,7 +17,7 @@
 | Week 3 — FastAPI Backend + ARQ Worker | ✅ Done | All endpoints live |
 | Week 4 — React Frontend | ✅ Done | All pages built and wired |
 | Week 5 — Email Send + Mock Mode | ✅ Done | Send flow verified end-to-end |
-| Week 6 — Hardening, Testing, Deployment | ✅ Done | Tests pass, Docker working locally |
+| Week 6 — Hardening, Testing, Deployment | ⚠️ Partial | Unit tests pass, Docker working locally; deployment + LangSmith pending |
 | Post-launch bug fixes | ✅ Done | See Bug Fix Log below |
 
 **The project is feature-complete and locally verified.** Railway + Vercel deployment is the remaining step.
@@ -88,13 +88,13 @@ Week 6  — Auth Hardening, Observability, Testing, Deployment
 | # | Status | Task |
 |---|---|---|
 | 3.1 | ✅ | FastAPI app factory + lifespan |
-| 3.2 | ✅ | Auth endpoints (`/auth/*`) |
+| 3.2 | ✅ | Auth endpoints (`/auth/*`) — register, login, refresh, logout, GET /auth/me, PATCH /auth/me (added during bug fixes) |
 | 3.3 | ✅ | Profile endpoints (`/profile/*`) |
 | 3.4 | ✅ | Outreach endpoints (`/outreach/*`) |
 | 3.5 | ✅ | CRM + health endpoints |
 | 3.6 | ✅ | ARQ worker + job functions (ingestion + outreach) |
 | 3.7 | ✅ | Rate limiter (Redis sliding window) |
-| 3.8 | ✅ | API tests |
+| 3.8 | ☐ | API tests | `tests/api/` directory exists but contains only `__init__.py` — no endpoint tests written yet |
 
 ---
 
@@ -121,18 +121,18 @@ Week 6  — Auth Hardening, Observability, Testing, Deployment
 | 5.2 | ✅ | `POST /outreach/{job_id}/send` endpoint |
 | 5.3 | ✅ | Approve & Send dialog in frontend |
 | 5.4 | ✅ | Mock mode with fixture loading and 2s step delays |
-| 5.5 | ✅ | Seed demo script (`demo@datapulse.io` / `Demo1234!`, 5 jobs) |
+| 5.5 | ✅ | Seed demo script (`demo@datapulse.io` / `Demo1234!`, 5 jobs) — uses `fixtures/seed_jobs.json` |
 
 ---
 
-## Week 6 — Hardening, Observability, Testing, Deployment ✅
+## Week 6 — Hardening, Observability, Testing, Deployment ⚠️ Partial
 
 | # | Status | Task | Notes |
 |---|---|---|---|
 | 6.1 | ☐ | LangSmith tracing | Disabled (`LANGCHAIN_TRACING_V2=false`); enable when ready |
 | 6.2 | ✅ | ARQ retry logic (max 3, exponential backoff) | |
 | 6.3 | ✅ | Unit tests — schemas, rate limiter, JWT (32 tests) | All passing |
-| 6.4 | ☐ | Integration test (real GPT-4o-mini run) | Scaffolded; not run in CI |
+| 6.4 | ☐ | Integration test (real GPT-4o-mini run) | Not written — `tests/integration/` directory does not exist |
 | 6.5 | ✅ | Docker Compose (5 services, non-conflicting ports 5433/6380) | Working locally |
 | 6.6 | ☐ | Railway deployment | Config files ready (`railway.toml`, `railway.worker.toml`); not deployed yet |
 | 6.7 | ☐ | Vercel deployment | Config ready (`vercel.json`); not deployed yet |
@@ -193,11 +193,12 @@ All bugs found and fixed during the first real end-to-end run. All fixes are com
 |---|---|---|
 | O1 | Enable LangSmith tracing | Set `LANGCHAIN_TRACING_V2=true` + add `LANGCHAIN_API_KEY` |
 | O2 | Resend custom domain setup | Verify DNS records in Resend dashboard; update `resend_domain` in Settings |
-| O3 | Add integration test to CI | `test_outreach_graph.py` with GPT-4o-mini |
-| O4 | v2 — Low-confidence research pause | `interrupt()` + human-in-the-loop mid-graph |
-| O5 | v2 — Draft quality self-critique loop | Conditional exit edges |
-| O6 | v2 — Resumable runs after failure | Postgres checkpointer |
-| O7 | v2 — Batch multi-prospect processing | `Send()` fan-out API |
+| O3 | Write API endpoint tests | `tests/api/` — cover all 17 endpoints, happy path + error paths |
+| O4 | Add integration test to CI | `tests/integration/test_outreach_graph.py` with GPT-4o-mini |
+| O5 | v2 — Low-confidence research pause | `interrupt()` + human-in-the-loop mid-graph |
+| O6 | v2 — Draft quality self-critique loop | Conditional exit edges |
+| O7 | v2 — Resumable runs after failure | Postgres checkpointer |
+| O8 | v2 — Batch multi-prospect processing | `Send()` fan-out API |
 
 ---
 
