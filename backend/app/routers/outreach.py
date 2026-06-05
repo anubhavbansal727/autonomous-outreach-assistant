@@ -1,7 +1,10 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from arq import create_pool
+
+logger = logging.getLogger(__name__)
 from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, update
@@ -270,10 +273,11 @@ async def send(
             subject=job.email_subject or "(no subject)",
             body_text=job.email_draft or "",
         )
-    except Exception:
+    except Exception as exc:
+        logger.exception("Resend API call failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error": "Email send failed", "code": "SEND_FAILED"},
+            detail={"error": f"Email send failed: {exc}", "code": "SEND_FAILED"},
         )
 
     now = datetime.now(timezone.utc)

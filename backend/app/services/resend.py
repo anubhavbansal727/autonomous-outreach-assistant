@@ -1,9 +1,12 @@
 import asyncio
+import logging
 from functools import partial
 
 import resend as resend_sdk
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _build_html(body_text: str) -> str:
@@ -43,8 +46,15 @@ async def send_email(
     """
     resend_sdk.api_key = settings.RESEND_API_KEY
 
+    # resend.dev is Resend's shared test domain — only onboarding@resend.dev
+    # is a permitted sender address on it.
+    if resend_domain == "resend.dev":
+        from_address = "onboarding@resend.dev"
+    else:
+        from_address = f"{from_name} <outreach@{resend_domain}>"
+
     payload = {
-        "from": f"{from_name} <outreach@{resend_domain}>",
+        "from": from_address,
         "to": [to_email],
         "subject": subject,
         "text": body_text,
