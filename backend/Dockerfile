@@ -33,5 +33,6 @@ RUN if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
 # Copy source
 COPY . .
 
-# The CMD is overridden per service in docker-compose.yml
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Railway injects $PORT; docker-compose overrides this CMD per service.
+# Shell form is required so ${PORT:-8000} is expanded at runtime.
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
