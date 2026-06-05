@@ -2,16 +2,11 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from arq import create_pool
-
-logger = logging.getLogger(__name__)
-from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.config import settings
 from app.db.session import get_db
 from app.models.db import OutreachJob, ProductProfile, User
 from app.models.schemas import (
@@ -28,20 +23,13 @@ from app.models.schemas import (
     SendRequest,
     SendResponse,
 )
+from app.services.arq_pool import get_arq_pool
 from app.services.rate_limiter import check_rate_limit
 from app.services.resend import send_email
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/outreach", tags=["outreach"])
-
-# Module-level ARQ pool cache shared with profile router
-_arq_pool = None
-
-
-async def get_arq_pool():
-    global _arq_pool
-    if _arq_pool is None:
-        _arq_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-    return _arq_pool
 
 
 async def _get_active_profile(db: AsyncSession, user_id: uuid.UUID) -> ProductProfile:
