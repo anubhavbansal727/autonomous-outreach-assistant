@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.db.session import engine
 from app.models.db import Base
 from app.routers import auth, crm, health, outreach, profile
