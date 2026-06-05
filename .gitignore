@@ -14,15 +14,15 @@ build/
 venv/
 env/
 
-# uv
-uv.lock
+# uv — lockfile must be committed for reproducible Docker builds
+# uv.lock
 
 # Environment / secrets
 .env
 *.env.local
 
-# Alembic
-backend/app/db/migrations/versions/
+# Alembic — migration scripts must be committed so Railway can run alembic upgrade head
+# backend/app/db/migrations/versions/
 
 # Node
 node_modules/
