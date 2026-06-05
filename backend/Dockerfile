@@ -33,6 +33,6 @@ RUN if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
 # Copy source
 COPY . .
 
-# Railway injects $PORT; docker-compose overrides this CMD per service.
-# Shell form is required so ${PORT:-8000} is expanded at runtime.
-CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Call uvicorn directly from the venv — avoids uv sync overhead on every start.
+# Railway injects $PORT; ${PORT:-8000} falls back to 8000 for local/docker-compose.
+CMD ["sh", "-c", ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
