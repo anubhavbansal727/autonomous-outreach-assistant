@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import update
@@ -7,6 +8,8 @@ from sqlalchemy import update
 from app.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.db import OutreachJob
+
+logger = logging.getLogger(__name__)
 
 # Mapping from LangGraph node name to the DB current_step value
 _NODE_STEP_MAP: dict[str, str] = {
@@ -172,15 +175,18 @@ async def _run_real_outreach(
             await db.commit()
 
     except Exception as exc:
-        async with AsyncSessionLocal() as db:
-            await db.execute(
-                update(OutreachJob)
-                .where(OutreachJob.id == job_id)
-                .values(
-                    status="failed",
-                    error_message=str(exc),
-                    retry_count=OutreachJob.retry_count + 1,
+        try:
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    update(OutreachJob)
+                    .where(OutreachJob.id == job_id)
+                    .values(
+                        status="failed",
+                        error_message=str(exc)[:1000],
+                        retry_count=OutreachJob.retry_count + 1,
+                    )
                 )
-            )
-            await db.commit()
-        raise  # let ARQ apply retry policy
+                await db.commit()
+        except Exception:
+            logger.exception("Failed to mark outreach job %s as failed", job_id)
+        raise exc

@@ -1,14 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from arq import create_pool
-from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.config import settings
 from app.db.session import get_db
 from app.models.db import IngestionJob, ProductProfile, User
 from app.models.schemas import (
@@ -21,19 +18,10 @@ from app.models.schemas import (
     UpdateProfileRequest,
     UpdateProfileResponse,
 )
+from app.services.arq_pool import get_arq_pool
 from app.services.rate_limiter import check_rate_limit
 
 router = APIRouter(prefix="/profile", tags=["profile"])
-
-# Module-level ARQ pool cache — created once, reused per process.
-_arq_pool = None
-
-
-async def get_arq_pool():
-    global _arq_pool
-    if _arq_pool is None:
-        _arq_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-    return _arq_pool
 
 
 @router.get("", response_model=ProfileResponse, status_code=status.HTTP_200_OK)
