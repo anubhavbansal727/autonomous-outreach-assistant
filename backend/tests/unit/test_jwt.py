@@ -7,23 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from jose import jwt
 
-# Patch settings before importing the module under test so we control
-# the secret key without needing a real .env file.
-_TEST_SECRET = "test-secret-key-at-least-32-bytes-long"
-_TEST_ALGO = "HS256"
-
-
-@pytest.fixture(autouse=True)
-def patch_settings(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET_KEY", _TEST_SECRET)
-    monkeypatch.setenv("JWT_ALGORITHM", _TEST_ALGO)
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://x:x@localhost/x")
-    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
-
-
-# Import after env vars are patched via autouse fixture at collection time.
-# Because pytest applies autouse fixtures before the test body, but NOT before
-# module-level imports, we import inside the tests themselves.
+from app.config import settings
 
 
 class TestCreateAccessToken:
@@ -36,14 +20,14 @@ class TestCreateAccessToken:
     def test_payload_type_is_access(self):
         from app.auth.dependencies import create_access_token
         token = create_access_token("user-abc")
-        payload = jwt.decode(token, _TEST_SECRET, algorithms=[_TEST_ALGO])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         assert payload["type"] == "access"
         assert payload["sub"] == "user-abc"
 
     def test_exp_is_in_future(self):
         from app.auth.dependencies import create_access_token
         token = create_access_token("user-xyz")
-        payload = jwt.decode(token, _TEST_SECRET, algorithms=[_TEST_ALGO])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         assert payload["exp"] > time.time()
 
     def test_different_users_produce_different_tokens(self):
@@ -57,15 +41,15 @@ class TestCreateRefreshToken:
     def test_payload_type_is_refresh(self):
         from app.auth.dependencies import create_refresh_token
         token = create_refresh_token("user-abc")
-        payload = jwt.decode(token, _TEST_SECRET, algorithms=[_TEST_ALGO])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         assert payload["type"] == "refresh"
 
     def test_refresh_expires_later_than_access(self):
         from app.auth.dependencies import create_access_token, create_refresh_token
         access = create_access_token("u")
         refresh = create_refresh_token("u")
-        access_exp = jwt.decode(access, _TEST_SECRET, algorithms=[_TEST_ALGO])["exp"]
-        refresh_exp = jwt.decode(refresh, _TEST_SECRET, algorithms=[_TEST_ALGO])["exp"]
+        access_exp = jwt.decode(access, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])["exp"]
+        refresh_exp = jwt.decode(refresh, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])["exp"]
         assert refresh_exp > access_exp
 
 
