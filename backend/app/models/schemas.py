@@ -128,7 +128,7 @@ class OutreachStatusResponse(BaseModel):
 
 
 class OutreachResultResponse(BaseModel):
-    job_id: uuid.UUID
+    id: uuid.UUID
     company_name: str
     contact_name: str | None
     status: str

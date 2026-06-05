@@ -179,7 +179,7 @@ async def get_result(
         )
 
     return OutreachResultResponse(
-        job_id=job.id,
+        id=job.id,
         company_name=job.company_name,
         contact_name=job.contact_name,
         status=job.status,
