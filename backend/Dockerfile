@@ -35,4 +35,4 @@ COPY . .
 
 # Call uvicorn directly from the venv — avoids uv sync overhead on every start.
 # Railway injects $PORT; ${PORT:-8000} falls back to 8000 for local/docker-compose.
-CMD ["sh", "-c", ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} 2>&1"]
