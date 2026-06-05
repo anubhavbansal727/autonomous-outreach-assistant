@@ -4,15 +4,14 @@
 # Build settings
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
-dockerBuildTarget = ""
+# dockerfilePath and startCommand are intentionally omitted here so each
+# Railway service (API vs worker) can set them independently in the dashboard.
 
 [build.args]
 INSTALL_PLAYWRIGHT = "false"
 
 # Deploy settings
 [deploy]
-startCommand = 'sh -c ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT"'
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
