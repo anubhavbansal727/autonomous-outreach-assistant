@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '@/api/client'
 import { useIngestionPolling } from '@/hooks/useJobPolling'
@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 
-type Phase = 'url' | 'progress' | 'review'
+type Phase = 'loading' | 'url' | 'progress' | 'review'
 
 interface ProfileDraft {
   product_name: string
@@ -23,6 +23,12 @@ interface ProfileDraft {
   icp: string
   avoid_messaging: string
   source_url: string
+}
+
+const EMPTY_DRAFT: ProfileDraft = {
+  product_name: '', one_liner: '', target_customer: '',
+  pain_points: [], differentiators: [], case_studies: [],
+  cta: '', icp: '', avoid_messaging: '', source_url: '',
 }
 
 const STEPS = ['scraping', 'extracting', 'complete']
@@ -58,7 +64,7 @@ function FieldArrayEditor({ label, values, onChange }: { label: string; values: 
       {values.map((v, i) => (
         <div key={i} className="flex gap-2">
           <Input value={v} onChange={e => { const n = [...values]; n[i] = e.target.value; onChange(n) }} />
-          <Button type="button" variant="outline" size="sm" onClick={() => onChange(values.filter((_, j) => j !== i))}>x</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onChange(values.filter((_, j) => j !== i))}>×</Button>
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={() => onChange([...values, ''])}>+ Add</Button>
@@ -68,25 +74,52 @@ function FieldArrayEditor({ label, values, onChange }: { label: string; values: 
 
 export function OnboardingPage() {
   const navigate = useNavigate()
-  const [phase, setPhase] = useState<Phase>('url')
+  const [phase, setPhase] = useState<Phase>('loading')
+  const [isEditing, setIsEditing] = useState(false)
   const [url, setUrl] = useState('')
   const [jobId, setJobId] = useState<string | null>(null)
   const [urlError, setUrlError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileLoaded, setProfileLoaded] = useState(false)
-  const [draft, setDraft] = useState<ProfileDraft>({
-    product_name: '', one_liner: '', target_customer: '',
-    pain_points: [], differentiators: [], case_studies: [],
-    cta: '', icp: '', avoid_messaging: '', source_url: '',
-  })
+  const [draft, setDraft] = useState<ProfileDraft>(EMPTY_DRAFT)
+
+  // On mount: check if the user already has an active profile
+  useEffect(() => {
+    apiFetch<{
+      profile_id: string; product_name: string; one_liner: string | null;
+      target_customer: string | null; pain_points: string[]; differentiators: string[];
+      case_studies: string[]; cta: string | null; icp: string | null;
+      avoid_messaging: string | null; source_url: string | null;
+    }>('/profile')
+      .then(p => {
+        setDraft({
+          product_name: p.product_name ?? '',
+          one_liner: p.one_liner ?? '',
+          target_customer: p.target_customer ?? '',
+          pain_points: p.pain_points ?? [],
+          differentiators: p.differentiators ?? [],
+          case_studies: p.case_studies ?? [],
+          cta: p.cta ?? '',
+          icp: p.icp ?? '',
+          avoid_messaging: p.avoid_messaging ?? '',
+          source_url: p.source_url ?? '',
+        })
+        setIsEditing(true)
+        setPhase('review')
+      })
+      .catch(() => {
+        // 404 = no profile yet — show the URL entry form
+        setPhase('url')
+      })
+  }, [])
 
   const pollingResult = useIngestionPolling(phase === 'progress' ? jobId : null)
 
   // Transition from progress -> review when done
   if (phase === 'progress' && pollingResult.data?.status === 'done' && pollingResult.data.profile && !profileLoaded) {
     const p = pollingResult.data.profile as Record<string, unknown>
-    const next: ProfileDraft = {
+    setDraft({
       product_name: (p.product_name as string) ?? '',
       one_liner: (p.one_liner as string) ?? '',
       target_customer: (p.target_customer as string) ?? '',
@@ -97,9 +130,9 @@ export function OnboardingPage() {
       icp: (p.icp as string) ?? '',
       avoid_messaging: '',
       source_url: url,
-    }
-    setDraft(next)
+    })
     setProfileLoaded(true)
+    setIsEditing(false)
     setPhase('review')
   }
 
@@ -112,6 +145,7 @@ export function OnboardingPage() {
     try {
       const data = await apiFetch<{ job_id: string }>('/profile/ingest', { method: 'POST', body: JSON.stringify({ url }) })
       setJobId(data.job_id)
+      setProfileLoaded(false)
       setPhase('progress')
     } catch (err: unknown) {
       setUrlError((err as { error?: string })?.error ?? 'Failed to start ingestion')
@@ -122,12 +156,22 @@ export function OnboardingPage() {
     e.preventDefault()
     setSavingProfile(true)
     try {
-      await apiFetch('/profile/save', { method: 'POST', body: JSON.stringify(draft) })
+      if (isEditing) {
+        await apiFetch('/profile/update', { method: 'PUT', body: JSON.stringify(draft) })
+      } else {
+        await apiFetch('/profile/save', { method: 'POST', body: JSON.stringify(draft) })
+      }
       navigate('/generate')
     } catch (err: unknown) {
       alert((err as { error?: string })?.error ?? 'Failed to save profile')
     } finally { setSavingProfile(false) }
   }
+
+  if (phase === 'loading') return (
+    <div className="flex items-center gap-2 text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />Loading...
+    </div>
+  )
 
   if (phase === 'url') return (
     <div className="max-w-xl">
@@ -169,11 +213,24 @@ export function OnboardingPage() {
     )
   }
 
-  // Review phase
+  // Review / edit phase
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold mb-1">Review your product profile</h1>
-      <p className="text-muted-foreground mb-6">Our AI pre-filled this from your website. Edit anything before saving.</p>
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-2xl font-bold">
+          {isEditing ? 'Your product profile' : 'Review your product profile'}
+        </h1>
+        {isEditing && (
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setPhase('url')}>
+            <RefreshCw className="h-3 w-3" />Re-analyze URL
+          </Button>
+        )}
+      </div>
+      <p className="text-muted-foreground mb-6">
+        {isEditing
+          ? 'Edit your profile below. Changes are saved immediately.'
+          : 'Our AI pre-filled this from your website. Edit anything before saving.'}
+      </p>
       <form onSubmit={handleSaveProfile} className="space-y-6">
         <Card><CardContent className="pt-6 space-y-4">
           <div className="space-y-1"><Label>Product name *</Label><Input value={draft.product_name} onChange={e => setDraft(d => ({ ...d, product_name: e.target.value }))} required /></div>
@@ -189,7 +246,9 @@ export function OnboardingPage() {
             <Textarea value={draft.avoid_messaging} onChange={e => setDraft(d => ({ ...d, avoid_messaging: e.target.value }))} placeholder="e.g. pricing comparisons, competitor names..." rows={2} />
           </div>
         </CardContent></Card>
-        <Button type="submit" className="w-full" disabled={savingProfile}>{savingProfile ? 'Saving...' : 'Save profile & continue'}</Button>
+        <Button type="submit" className="w-full" disabled={savingProfile}>
+          {savingProfile ? 'Saving...' : isEditing ? 'Save changes' : 'Save profile & continue'}
+        </Button>
       </form>
     </div>
   )

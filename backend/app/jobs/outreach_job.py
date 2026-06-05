@@ -26,55 +26,58 @@ async def run_outreach_job(
     product_profile: dict,
 ) -> None:
     """ARQ job entry point for the outreach graph."""
+    if settings.MOCK_MODE:
+        await _run_mock_outreach(job_id)
+    else:
+        await _run_real_outreach(job_id, company_name, contact_name, product_profile)
+
+
+async def _update_step(job_id: str, step: str) -> None:
+    """Commit current_step in its own session so the polling API sees it immediately.
+
+    Previously this shared the outer transaction and only called flush(), making
+    step updates invisible to other DB connections until the whole job committed.
+    """
     async with AsyncSessionLocal() as db:
-        async with db.begin():
-            if settings.MOCK_MODE:
-                await _run_mock_outreach(db, job_id)
-            else:
-                await _run_real_outreach(
-                    db, job_id, company_name, contact_name, product_profile
-                )
+        await db.execute(
+            update(OutreachJob)
+            .where(OutreachJob.id == job_id)
+            .values(current_step=step)
+        )
+        await db.commit()
 
 
-async def _update_step(db, job_id: str, step: str) -> None:
-    await db.execute(
-        update(OutreachJob)
-        .where(OutreachJob.id == job_id)
-        .values(current_step=step)
-    )
-    await db.flush()
-
-
-async def _run_mock_outreach(db, job_id: str) -> None:
+async def _run_mock_outreach(job_id: str) -> None:
     import pathlib
 
     fixtures_dir = pathlib.Path(__file__).parent.parent.parent / "fixtures"
 
     for step in ("researching", "personalizing", "scheduling"):
-        await _update_step(db, job_id, step)
+        await _update_step(job_id, step)
         await asyncio.sleep(2)
 
     draft = json.loads((fixtures_dir / "outreach_draft.json").read_text())
     schedule = json.loads((fixtures_dir / "schedule_output.json").read_text())
 
-    await db.execute(
-        update(OutreachJob)
-        .where(OutreachJob.id == job_id)
-        .values(
-            status="done",
-            current_step="complete",
-            email_subject=draft.get("email_subject"),
-            email_draft=draft.get("email_body"),
-            linkedin_draft=draft.get("linkedin_note"),
-            data_confidence=draft.get("data_confidence", "medium"),
-            schedule_json=schedule,
-            completed_at=datetime.now(timezone.utc),
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(OutreachJob)
+            .where(OutreachJob.id == job_id)
+            .values(
+                status="done",
+                current_step="complete",
+                email_subject=draft.get("email_subject"),
+                email_draft=draft.get("email_body"),
+                linkedin_draft=draft.get("linkedin_note"),
+                data_confidence=draft.get("data_confidence", "medium"),
+                schedule_json=schedule,
+                completed_at=datetime.now(timezone.utc),
+            )
         )
-    )
+        await db.commit()
 
 
 async def _run_real_outreach(
-    db,
     job_id: str,
     company_name: str,
     contact_name: str | None,
@@ -113,7 +116,6 @@ async def _run_real_outreach(
         accumulated_state: dict = {}
 
         # run_name must NOT contain contact_name or prospect email (CLAUDE.md rule #5).
-        # We use a generic identifier so LangSmith traces are PII-free.
         langsmith_config = {
             "recursion_limit": 25,
             "run_name": f"outreach-job-{job_id[:8]}",
@@ -122,14 +124,13 @@ async def _run_real_outreach(
         async for event in graph.astream(initial_state, config=langsmith_config):
             node_name = next(iter(event))
             node_output = event[node_name]
-            # Merge node output into accumulated state (skip message lists to avoid bloat)
             if isinstance(node_output, dict):
                 accumulated_state.update(
                     {k: v for k, v in node_output.items() if k != "messages"}
                 )
 
             if node_name in _NODE_STEP_MAP:
-                await _update_step(db, job_id, _NODE_STEP_MAP[node_name])
+                await _update_step(job_id, _NODE_STEP_MAP[node_name])
 
         final_state = accumulated_state
 
@@ -153,28 +154,33 @@ async def _run_real_outreach(
             except Exception:
                 pass
 
-        await db.execute(
-            update(OutreachJob)
-            .where(OutreachJob.id == job_id)
-            .values(
-                status="done",
-                current_step="complete",
-                email_subject=final_state.get("email_subject") or None,
-                email_draft=final_state.get("email_body") or None,
-                linkedin_draft=final_state.get("linkedin_note") or None,
-                data_confidence=confidence_str,
-                schedule_json=schedule_json,
-                completed_at=datetime.now(timezone.utc),
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(OutreachJob)
+                .where(OutreachJob.id == job_id)
+                .values(
+                    status="done",
+                    current_step="complete",
+                    email_subject=final_state.get("email_subject") or None,
+                    email_draft=final_state.get("email_body") or None,
+                    linkedin_draft=final_state.get("linkedin_note") or None,
+                    data_confidence=confidence_str,
+                    schedule_json=schedule_json,
+                    completed_at=datetime.now(timezone.utc),
+                )
             )
-        )
+            await db.commit()
+
     except Exception as exc:
-        await db.execute(
-            update(OutreachJob)
-            .where(OutreachJob.id == job_id)
-            .values(
-                status="failed",
-                error_message=str(exc),
-                retry_count=OutreachJob.retry_count + 1,
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(OutreachJob)
+                .where(OutreachJob.id == job_id)
+                .values(
+                    status="failed",
+                    error_message=str(exc),
+                    retry_count=OutreachJob.retry_count + 1,
+                )
             )
-        )
+            await db.commit()
         raise  # let ARQ apply retry policy

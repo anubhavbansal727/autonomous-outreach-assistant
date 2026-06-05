@@ -15,6 +15,7 @@ from app.models.schemas import (
     IngestRequest,
     IngestResponse,
     IngestionResultResponse,
+    ProfileResponse,
     SaveProfileRequest,
     SaveProfileResponse,
     UpdateProfileRequest,
@@ -33,6 +34,39 @@ async def get_arq_pool():
     if _arq_pool is None:
         _arq_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
     return _arq_pool
+
+
+@router.get("", response_model=ProfileResponse, status_code=status.HTTP_200_OK)
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProfileResponse:
+    result = await db.execute(
+        select(ProductProfile).where(
+            ProductProfile.user_id == current_user.id,
+            ProductProfile.is_active == True,  # noqa: E712
+        )
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "No active profile found", "code": "NO_ACTIVE_PROFILE"},
+        )
+    return ProfileResponse(
+        profile_id=profile.id,
+        product_name=profile.product_name,
+        one_liner=profile.one_liner,
+        target_customer=profile.target_customer,
+        pain_points=profile.pain_points or [],
+        differentiators=profile.differentiators or [],
+        case_studies=profile.case_studies or [],
+        cta=profile.cta,
+        icp=profile.icp,
+        avoid_messaging=profile.avoid_messaging,
+        source_url=profile.source_url,
+        updated_at=profile.updated_at,
+    )
 
 
 @router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)

@@ -76,6 +76,23 @@ class IngestionResultResponse(BaseModel):
     error_message: str | None
 
 
+class ProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    profile_id: uuid.UUID
+    product_name: str
+    one_liner: str | None
+    target_customer: str | None
+    pain_points: list[str]
+    differentiators: list[str]
+    case_studies: list[str]
+    cta: str | None
+    icp: str | None
+    avoid_messaging: str | None
+    source_url: str | None
+    updated_at: datetime | None
+
+
 class SaveProfileRequest(BaseModel):
     product_name: str = Field(max_length=200)
     one_liner: str | None = Field(default=None, max_length=500)
