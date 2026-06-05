@@ -20,7 +20,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Dependency layer (cached separately from source)
-COPY pyproject.toml ./
+# uv.lock must be copied alongside pyproject.toml — --frozen requires it
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 # Install Playwright Chromium (always required for the worker's scraping tools)
