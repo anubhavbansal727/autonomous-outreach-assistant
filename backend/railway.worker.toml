@@ -4,7 +4,7 @@
 #
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.worker"
 
 [build.args]
 INSTALL_PLAYWRIGHT = "true"
