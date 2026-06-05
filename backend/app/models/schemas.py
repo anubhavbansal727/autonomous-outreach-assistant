@@ -44,6 +44,10 @@ class LogoutResponse(BaseModel):
     logged_out: bool = True
 
 
+class UpdateMeRequest(BaseModel):
+    resend_domain: str | None = Field(default=None, max_length=253)
+
+
 # ---------------------------------------------------------------------------
 # Profile
 # ---------------------------------------------------------------------------

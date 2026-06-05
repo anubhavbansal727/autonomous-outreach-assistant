@@ -256,12 +256,9 @@ async def send(
     )
     profile = result.scalar_one_or_none()
 
-    resend_domain = current_user.resend_domain
-    if not resend_domain:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "No sending domain configured", "code": "NO_RESEND_DOMAIN"},
-        )
+    # Fall back to resend.dev (Resend test domain) when the user hasn't
+    # configured a verified sending domain yet.
+    resend_domain = current_user.resend_domain or "resend.dev"
 
     product_name = profile.product_name if profile else "Our Product"
 

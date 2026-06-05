@@ -21,6 +21,7 @@ from app.models.schemas import (
     RefreshResponse,
     RegisterRequest,
     TokenResponse,
+    UpdateMeRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -134,6 +135,24 @@ async def logout(response: Response) -> LogoutResponse:
 
 @router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
 async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
+    return MeResponse(
+        user_id=current_user.id,
+        email=current_user.email,
+        resend_domain=current_user.resend_domain,
+        created_at=current_user.created_at,
+    )
+
+
+@router.patch("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
+async def update_me(
+    body: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    if body.resend_domain is not None:
+        current_user.resend_domain = body.resend_domain or None
+    await db.commit()
+    await db.refresh(current_user)
     return MeResponse(
         user_id=current_user.id,
         email=current_user.email,

@@ -15,7 +15,7 @@ export function SettingsPage() {
   const handleSaveDomain = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setSaved(false)
     try {
-      await apiFetch('/profile/update', { method: 'PUT', body: JSON.stringify({ resend_domain: domain }) })
+      await apiFetch('/auth/me', { method: 'PATCH', body: JSON.stringify({ resend_domain: domain }) })
       setSaved(true)
     } catch {}
     finally { setSaving(false) }
