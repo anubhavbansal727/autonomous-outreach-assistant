@@ -17,10 +17,10 @@
 | Week 3 — FastAPI Backend + ARQ Worker | ✅ Done | All endpoints live |
 | Week 4 — React Frontend | ✅ Done | All pages built and wired |
 | Week 5 — Email Send + Mock Mode | ✅ Done | Send flow verified end-to-end |
-| Week 6 — Hardening, Testing, Deployment | ⚠️ Partial | Unit tests pass, Docker working locally; deployment + LangSmith pending |
+| Week 6 — Hardening, Testing, Deployment | ✅ Done | Railway + Vercel live; end-to-end smoke test passed in production |
 | Post-launch bug fixes | ✅ Done | See Bug Fix Log below |
 
-**The project is feature-complete and locally verified.** Railway + Vercel deployment is the remaining step.
+**v1 is complete and live in production.** Railway (API + worker) and Vercel (frontend) are deployed and verified end-to-end.
 
 ---
 
@@ -49,8 +49,8 @@ Week 6  — Auth Hardening, Observability, Testing, Deployment
 | 0.3 | ✅ | Sign up for Serper | API key in `.env` |
 | 0.4 | ✅ | Sign up for Resend | API key in `.env`; domain verification pending (using test domain for now) |
 | 0.5 | ☐ | Sign up for LangSmith | Optional — `LANGCHAIN_TRACING_V2=false` currently |
-| 0.6 | ☐ | Sign up for Railway | Needed for production deployment |
-| 0.7 | ☐ | Sign up for Vercel | Needed for frontend deployment |
+| 0.6 | ✅ | Sign up for Railway | API + worker services live |
+| 0.7 | ✅ | Sign up for Vercel | Frontend deployed |
 
 ---
 
@@ -134,9 +134,9 @@ Week 6  — Auth Hardening, Observability, Testing, Deployment
 | 6.3 | ✅ | Unit tests — schemas, rate limiter, JWT (32 tests) | All passing |
 | 6.4 | ☐ | Integration test (real GPT-4o-mini run) | Not written — `tests/integration/` directory does not exist |
 | 6.5 | ✅ | Docker Compose (5 services, non-conflicting ports 5433/6380) | Working locally |
-| 6.6 | ☐ | Railway deployment | Config files ready (`railway.toml`, `railway.worker.toml`); not deployed yet |
-| 6.7 | ☐ | Vercel deployment | Config ready (`vercel.json`); not deployed yet |
-| 6.8 | ☐ | End-to-end smoke test (production) | Blocked on 6.6 + 6.7 |
+| 6.6 | ✅ | Railway deployment | API + worker live; Postgres + Redis managed services attached |
+| 6.7 | ✅ | Vercel deployment | Frontend live; API proxy pointed at Railway backend |
+| 6.8 | ✅ | End-to-end smoke test (production) | Ingest → generate → approve & send verified June 5, 2026 |
 
 ---
 
@@ -155,6 +155,10 @@ All bugs found and fixed during the first real end-to-end run. All fixes are com
 | `1fa1b45` | Send button POSTed to `/outreach/send/undefined` | `OutreachResultResponse` returned `job_id` but TS type `OutreachJob` expected `id` | Renamed field to `id` in schema + router constructor |
 | `a48dc2c` | Send returned 400 `NO_RESEND_DOMAIN` | User has no verified domain; endpoint hard-rejected instead of falling back | Fall back to `resend.dev`; add `PATCH /auth/me` endpoint; fix Settings page to call correct endpoint |
 | `403e902` | Send returned 502 | `outreach@resend.dev` is not a permitted sender on Resend's test domain | Use `onboarding@resend.dev` when domain is `resend.dev`; log real exception before 502 |
+| `aee22d3` | Railway API crash on boot | `from app import settings` import path broken in `main.py` | Fixed import to `from app.config import settings` |
+| `3d3769b` | Worker `BrowserType.launch` error | `Dockerfile.worker` had incomplete Chromium system deps (missing `libx11-6`, `libxcb1`, `libcairo2`, `libpango-1.0-0` etc.) | Added full set of Chromium system libs; kept `--with-deps` removed to avoid Debian trixie font package failure |
+| `221653f` | Worker arq logs shown as `severity:error` in Railway | arq writes all logs to stderr; Railway maps stderr→error | Set `stream=sys.stdout` in `logging.basicConfig` in `worker.py` |
+| `3e003ce` | API uvicorn logs shown as `severity:error` in Railway | uvicorn writes to stderr by default | Added `2>&1` to CMD in `Dockerfile` to merge stderr into stdout |
 
 ---
 
@@ -164,28 +168,16 @@ All bugs found and fixed during the first real end-to-end run. All fixes are com
 - [x] `pytest tests/unit tests/api` — all passing
 - [x] `MOCK_MODE=true` — full flow works without real API keys
 - [x] Real API keys — full flow verified end-to-end (ingest → generate → approve & send)
-- [x] Email delivered via Resend (verified locally)
+- [x] Email delivered via Resend (verified locally and in production)
 - [x] Seed script produces demo-ready data
 - [x] README documents setup, env vars, architecture, and how to run
-- [ ] Railway deployment live — backend health check green
-- [ ] Vercel deployment live — frontend accessible at public URL
+- [x] Railway deployment live — backend health check green
+- [x] Vercel deployment live — frontend accessible at public URL
 - [ ] LangSmith traces visible for at least one production run
 
 ---
 
 ## Remaining To-Do
-
-### Deployment (next priority)
-
-| # | Task | Notes |
-|---|---|---|
-| D1 | Create Railway project, add Postgres + Redis plugins | |
-| D2 | Create `backend` service — set env vars, deploy from GitHub | RAM: 256 MB |
-| D3 | Run `alembic upgrade head` via Railway shell | One-time, after first deploy |
-| D4 | Create `worker` service — set `INSTALL_PLAYWRIGHT=true`, `CMD=python worker.py` | RAM: 512 MB |
-| D5 | Create Vercel project — connect frontend dir, set `VITE_API_URL` to Railway URL | |
-| D6 | Run `python scripts/seed_demo.py` against production DB | |
-| D7 | End-to-end smoke test on live URLs | Register → ingest → generate → send |
 
 ### Optional / v2 Backlog
 

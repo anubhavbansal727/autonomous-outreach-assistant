@@ -3,10 +3,10 @@
 **Product:** Mini CRM AI Crew  
 **Type:** Internal Tool / Developer Portfolio Project  
 **Author:** Anubhav Bansal  
-**Version:** 2.1  
-**Status:** Draft  
-**Date:** May 28, 2026  
-**Changelog:** v2.1 — Added async queue spec, Scheduler Agent contract, Testing Strategy, Demo & Portfolio section, Privacy & Data Retention, prompt injection mitigation, data model gaps, WebSocket vs polling tradeoff, CrewAI context-passing notes, `avoid_messaging` injection mechanism, API key lifecycle, edit flow spec.
+**Version:** 2.2  
+**Status:** v1 Shipped  
+**Date:** June 5, 2026  
+**Changelog:** v2.1 — Added async queue spec, Scheduler Agent contract, Testing Strategy, Demo & Portfolio section, Privacy & Data Retention, prompt injection mitigation, data model gaps, WebSocket vs polling tradeoff, `avoid_messaging` injection mechanism, API key lifecycle, edit flow spec. v2.2 — Corrected stack: implementation uses LangGraph natively (not CrewAI); updated Goal, Agent Architecture, and Milestones accordingly. Marked v1 as shipped.
 
 ---
 
@@ -20,7 +20,7 @@ This project builds a production-grade autonomous agent system that mirrors thos
 
 ## Goal
 
-Build a **deployable B2B outreach automation tool** powered by a multi-agent CrewAI system, exposed via a FastAPI backend and a minimal React frontend — demonstrating real-world agentic AI patterns including onboarding ingestion, outreach generation, and human-approved email delivery.
+Build a **deployable B2B outreach automation tool** powered by a multi-agent LangGraph system, exposed via a FastAPI backend and a minimal React frontend — demonstrating real-world agentic AI patterns including onboarding ingestion, outreach generation, and human-approved email delivery.
 
 ---
 
@@ -396,7 +396,7 @@ The four features below are intentionally deferred to v2. Each one requires a La
 
 | Week | Deliverable |
 |---|---|
-| 1 | Working 3-agent outreach crew in CLI; sequential flow validated; CrewAI context-passing confirmed |
+| 1 | Working 3-node LangGraph outreach graph in CLI; ReAct research loop, structured personalisation, schedule extraction validated |
 | 2 | Ingestion crew (scraper + extractor); onboarding flow with editable pre-fill form |
 | 3 | FastAPI backend — all endpoints, ARQ job queue, PostgreSQL + Redis integration |
 | 4 | React frontend — onboarding, generate, result display (with edit mode), history tab |
