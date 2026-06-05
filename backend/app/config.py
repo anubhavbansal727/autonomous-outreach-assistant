@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +15,19 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
 
     # Database
+    # Railway's Postgres plugin provides postgresql:// or postgres:// — both are
+    # normalised to postgresql+asyncpg:// so every consumer gets the async driver.
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost/crm"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalise_db_url(cls, v: str) -> str:
+        """Ensure the asyncpg driver is always used regardless of how the URL arrives."""
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # Redis / ARQ
     REDIS_URL: str = "redis://localhost:6379"
