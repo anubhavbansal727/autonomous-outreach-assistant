@@ -1,11 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { Zap, History, Settings, LogOut, Building2 } from 'lucide-react'
+import { Zap, History, Settings, LogOut, Building2, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/', label: 'Onboarding', icon: Building2 },
   { to: '/generate', label: 'Generate', icon: Zap },
+  { to: '/batch', label: 'Batch', icon: Layers },
   { to: '/history', label: 'History', icon: History },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
