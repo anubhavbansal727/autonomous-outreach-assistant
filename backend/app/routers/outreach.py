@@ -1,15 +1,21 @@
+import csv
+import io
 import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
-from app.models.db import OutreachJob, ProductProfile, User
+from app.models.db import BatchJob, OutreachJob, ProductProfile, User
 from app.models.schemas import (
+    BatchCreateResponse,
+    BatchProspectStatus,
+    BatchStatusResponse,
     DeleteJobResponse,
     EditDraftRequest,
     EditDraftResponse,
@@ -81,6 +87,56 @@ def _profile_to_dict(profile: ProductProfile) -> dict:
     }
 
 
+MAX_BATCH_PROSPECTS = 20
+
+
+def _parse_prospects_csv(raw: bytes) -> list[GenerateRequest]:
+    """Parse + validate an uploaded CSV into prospect rows.
+
+    Requires a ``company_name`` column; ``contact_name`` is optional. Blank lines
+    are skipped. Each row is validated through GenerateRequest (same sanitisation
+    as the single-prospect endpoint). Raises 400 INVALID_CSV on any problem.
+    """
+    def _bad(msg: str):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": msg, "code": "INVALID_CSV"},
+        )
+
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise _bad("File must be UTF-8 encoded.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = [(h or "").strip().lower() for h in (reader.fieldnames or [])]
+    if "company_name" not in headers:
+        raise _bad("CSV must have a 'company_name' column.")
+
+    prospects: list[GenerateRequest] = []
+    for line_no, row in enumerate(reader, start=2):
+        norm = {
+            (k or "").strip().lower(): (v.strip() if isinstance(v, str) else v)
+            for k, v in row.items()
+        }
+        company = norm.get("company_name") or ""
+        contact = norm.get("contact_name") or None
+        if not company:
+            continue  # skip blank rows
+        try:
+            prospects.append(
+                GenerateRequest(company_name=company, contact_name=contact)
+            )
+        except ValidationError:
+            raise _bad(f"Invalid row {line_no}: '{company}'.")
+        if len(prospects) > MAX_BATCH_PROSPECTS:
+            raise _bad(f"Batch is limited to {MAX_BATCH_PROSPECTS} prospects.")
+
+    if not prospects:
+        raise _bad("CSV contained no valid prospect rows.")
+    return prospects
+
+
 @router.post(
     "/generate", response_model=GenerateResponse, status_code=status.HTTP_202_ACCEPTED
 )
@@ -130,6 +186,141 @@ async def generate(
     )
 
     return GenerateResponse(job_id=job.id)
+
+
+@router.post(
+    "/batch", response_model=BatchCreateResponse, status_code=status.HTTP_202_ACCEPTED
+)
+async def create_batch(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BatchCreateResponse:
+    """Upload a CSV of up to 20 prospects and kick off a batch outreach run."""
+    raw = await file.read()
+    prospects = _parse_prospects_csv(raw)
+
+    pool = await get_arq_pool()
+    # Batches get their own quota, independent of the single-generate limit.
+    allowed, retry_after = await check_rate_limit(
+        pool,
+        f"batch:{current_user.id}",
+        limit=2,
+        window=3600,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": f"Batch rate limit exceeded. Retry after {retry_after} seconds.",
+                "code": "RATE_LIMIT_EXCEEDED",
+            },
+        )
+
+    profile = await _get_active_profile(db, current_user.id)
+
+    batch_id = uuid.uuid4()
+    db.add(
+        BatchJob(
+            id=batch_id,
+            user_id=current_user.id,
+            product_profile_id=profile.id,
+            status="running",
+            total=len(prospects),
+        )
+    )
+
+    payload: list[dict] = []
+    for idx, p in enumerate(prospects):
+        job_id = uuid.uuid4()
+        db.add(
+            OutreachJob(
+                id=job_id,
+                user_id=current_user.id,
+                product_profile_id=profile.id,
+                batch_id=batch_id,
+                batch_index=idx,
+                company_name=p.company_name,
+                contact_name=p.contact_name,
+                status="running",
+                current_step="researching",
+            )
+        )
+        payload.append(
+            {
+                "index": idx,
+                "job_id": str(job_id),
+                "company_name": p.company_name,
+                "contact_name": p.contact_name,
+            }
+        )
+
+    await db.commit()
+
+    # Timeout (600s) and no-retry are configured on the worker via arq.func();
+    # enqueue_job does not accept per-call _job_timeout/_max_tries.
+    await pool.enqueue_job(
+        "run_batch_job",
+        batch_id=str(batch_id),
+        user_id=str(current_user.id),
+        prospects=payload,
+        product_profile=_profile_to_dict(profile),
+    )
+
+    return BatchCreateResponse(batch_id=batch_id, total=len(prospects))
+
+
+@router.get(
+    "/batch/{batch_id}",
+    response_model=BatchStatusResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_batch_status(
+    batch_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BatchStatusResponse:
+    result = await db.execute(
+        select(BatchJob).where(
+            BatchJob.id == batch_id,
+            BatchJob.user_id == current_user.id,
+        )
+    )
+    batch = result.scalar_one_or_none()
+    if batch is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "Batch not found", "code": "BATCH_NOT_FOUND"},
+        )
+
+    items_result = await db.execute(
+        select(OutreachJob)
+        .where(OutreachJob.batch_id == batch_id)
+        .order_by(OutreachJob.batch_index)
+    )
+    jobs = items_result.scalars().all()
+
+    return BatchStatusResponse(
+        batch_id=batch.id,
+        status=batch.status,
+        total=batch.total,
+        research_done=batch.research_done,
+        personalize_done=batch.personalize_done,
+        prospects=[
+            BatchProspectStatus(
+                job_id=j.id,
+                company_name=j.company_name,
+                contact_name=j.contact_name,
+                status=j.status,
+                current_step=j.current_step,
+                send_status=j.send_status,
+                data_confidence=j.data_confidence,
+            )
+            for j in jobs
+        ],
+        created_at=batch.created_at,
+        completed_at=batch.completed_at,
+    )
 
 
 @router.get(

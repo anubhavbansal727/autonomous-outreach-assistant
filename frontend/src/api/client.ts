@@ -20,8 +20,10 @@ async function refreshToken(): Promise<string> {
 
 export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken()
+  const isFormData = options.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // Let the browser set the multipart boundary for FormData uploads.
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> ?? {}),
   }
   if (token) headers['Authorization'] = `Bearer ${token}`

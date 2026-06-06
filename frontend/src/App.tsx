@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 import { GeneratePage } from '@/pages/GeneratePage'
+import { BatchPage } from '@/pages/BatchPage'
 import { ResultPage } from '@/pages/ResultPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -25,6 +26,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<OnboardingPage />} />
               <Route path="/generate" element={<GeneratePage />} />
+              <Route path="/batch" element={<BatchPage />} />
               <Route path="/result/:jobId" element={<ResultPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/settings" element={<SettingsPage />} />

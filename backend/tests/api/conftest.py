@@ -25,6 +25,7 @@ from app.main import create_app
 USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 PROFILE_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 JOB_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
+BATCH_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
 CREATED_AT = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
@@ -117,6 +118,26 @@ def make_outreach_job(
     j.completed_at = completed_at or CREATED_AT
     j.retry_count = retry_count
     return j
+
+
+def make_batch_job(
+    batch_id=None,
+    status="running",
+    total=3,
+    research_done=0,
+    personalize_done=0,
+    completed_at=None,
+):
+    """Return a MagicMock that looks like a BatchJob ORM row."""
+    b = MagicMock()
+    b.id = batch_id or BATCH_ID
+    b.status = status
+    b.total = total
+    b.research_done = research_done
+    b.personalize_done = personalize_done
+    b.created_at = CREATED_AT
+    b.completed_at = completed_at
+    return b
 
 
 # ---------------------------------------------------------------------------

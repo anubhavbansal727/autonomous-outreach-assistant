@@ -78,6 +78,12 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    batch_jobs: Mapped[list[BatchJob]] = relationship(
+        "BatchJob",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +232,13 @@ class OutreachJob(Base):
         ForeignKey("product_profiles.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # When set, this job is part of a batch run. NULL for single-prospect jobs.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("batch_jobs.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    batch_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     company_name: Mapped[str] = mapped_column(TEXT, nullable=False)
     contact_name: Mapped[str | None] = mapped_column(TEXT, nullable=True)
     status: Mapped[str] = mapped_column(
@@ -281,6 +294,7 @@ class OutreachJob(Base):
         ),
         Index("ix_outreach_jobs_user_id", "user_id"),
         Index("ix_outreach_jobs_user_id_created_at", "user_id", "created_at"),
+        Index("ix_outreach_jobs_batch_id", "batch_id"),
         Index(
             "ix_outreach_jobs_status_running",
             "status",
@@ -294,4 +308,70 @@ class OutreachJob(Base):
     )
     product_profile: Mapped[ProductProfile | None] = relationship(
         "ProductProfile", back_populates="outreach_jobs", lazy="noload"
+    )
+    batch: Mapped[BatchJob | None] = relationship(
+        "BatchJob", back_populates="jobs", lazy="noload"
+    )
+
+
+# ---------------------------------------------------------------------------
+# BatchJob — parent record for a multi-prospect batch run
+# ---------------------------------------------------------------------------
+
+
+class BatchJob(Base):
+    __tablename__ = "batch_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    product_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        TEXT,
+        server_default=text("'running'"),
+        nullable=False,
+    )
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Atomically incremented by graph nodes as prospects move through phases.
+    research_done: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
+    personalize_done: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
+    error_message: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("NOW()"),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'done', 'failed')",
+            name="ck_batch_jobs_status",
+        ),
+        Index("ix_batch_jobs_user_id_created_at", "user_id", "created_at"),
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship(
+        "User", back_populates="batch_jobs", lazy="noload"
+    )
+    jobs: Mapped[list[OutreachJob]] = relationship(
+        "OutreachJob", back_populates="batch", lazy="noload"
     )

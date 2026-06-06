@@ -1,9 +1,11 @@
 import logging
 import sys
 
+from arq import func
 from arq.connections import RedisSettings
 
 from app.config import settings
+from app.jobs.batch_job import run_batch_job
 from app.jobs.ingestion_job import run_ingestion_job
 from app.jobs.outreach_job import run_outreach_job
 
@@ -16,7 +18,14 @@ logging.basicConfig(
 
 
 class WorkerSettings:
-    functions = [run_ingestion_job, run_outreach_job]
+    functions = [
+        run_ingestion_job,
+        run_outreach_job,
+        # A batch of up to 20 prospects can exceed the default 120s timeout, and a
+        # partially-completed batch must not restart from scratch — so this job
+        # gets a longer timeout and no retries (overrides the worker defaults).
+        func(run_batch_job, name="run_batch_job", timeout=600, max_tries=1),
+    ]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     max_jobs = 10
     job_timeout = 120

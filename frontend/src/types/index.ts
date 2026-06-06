@@ -79,6 +79,32 @@ export interface ApiError {
   retry_after?: number
 }
 
+export interface BatchCreateResponse {
+  batch_id: string
+  total: number
+}
+
+export interface BatchProspectStatus {
+  job_id: string
+  company_name: string
+  contact_name: string | null
+  status: 'running' | 'done' | 'failed'
+  current_step: 'researching' | 'personalizing' | 'scheduling' | 'complete' | null
+  send_status: string
+  data_confidence: string | null
+}
+
+export interface BatchStatusResponse {
+  batch_id: string
+  status: 'running' | 'done' | 'failed'
+  total: number
+  research_done: number
+  personalize_done: number
+  prospects: BatchProspectStatus[]
+  created_at: string
+  completed_at: string | null
+}
+
 export interface IngestionResultResponse {
   job_id: string
   status: 'running' | 'done' | 'failed'

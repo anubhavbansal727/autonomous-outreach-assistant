@@ -217,6 +217,39 @@ class DeleteJobResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Batch
+# ---------------------------------------------------------------------------
+
+
+class BatchCreateResponse(BaseModel):
+    batch_id: uuid.UUID
+    total: int
+
+
+class BatchProspectStatus(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: uuid.UUID
+    company_name: str
+    contact_name: str | None
+    status: str
+    current_step: str | None
+    send_status: str
+    data_confidence: str | None
+
+
+class BatchStatusResponse(BaseModel):
+    batch_id: uuid.UUID
+    status: str
+    total: int
+    research_done: int
+    personalize_done: int
+    prospects: list[BatchProspectStatus]
+    created_at: datetime
+    completed_at: datetime | None
+
+
+# ---------------------------------------------------------------------------
 # CRM
 # ---------------------------------------------------------------------------
 
