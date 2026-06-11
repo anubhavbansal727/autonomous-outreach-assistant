@@ -15,6 +15,8 @@ Sales reps spend 2–3 hours per prospect manually researching companies, writin
 3. **Review the draft** → You approve before anything is sent
 4. **One click to send** → Email delivered via Resend with CAN-SPAM compliance
 
+**Working at scale?** Upload a CSV of up to 20 prospects on the **Batch** page: research runs in parallel across all of them (LangGraph `Send()` fan-out), then personalised drafts are written one by one — with a live progress view ("Research: 18/20 · Personalizing: 6/20"). Each prospect lands in the same Result page for review and send.
+
 ---
 
 ## Demo
@@ -119,7 +121,7 @@ autonomous-outreach-assistant/
 └── frontend/
     └── src/
         ├── api/client.ts         # apiFetch — Bearer injection, 401 retry
-        ├── pages/                # Onboarding, Generate, Result, History, Settings
+        ├── pages/                # Onboarding, Generate, Batch, Result, History, Settings
         ├── components/           # ui/, layout/, onboarding/, outreach/, history/
         ├── hooks/
         │   ├── useJobPolling.ts  # TanStack Query polling (3s interval)
@@ -243,6 +245,7 @@ Estimated cost: ~$2–4/month on Railway Hobby + Vercel free tier.
 | Pattern | Implementation |
 |---|---|
 | Multi-agent orchestration | LangGraph `StateGraph` with typed shared state |
+| Dynamic fan-out / map-reduce | Batch processing via LangGraph `Send()` — parallel research, fan-in, sequential personalization |
 | ReAct tool-use loops | `research_node` + `ToolNode` with conditional edges |
 | Structured output | `llm.with_structured_output(PydanticModel)` |
 | Human-in-the-loop | Draft review before email send |

@@ -368,6 +368,8 @@ The four features below are intentionally deferred to v2. Each one requires a La
 ### Feature 4 — Batch Multi-Prospect Processing
 **LangGraph capability required:** Dynamic fan-out with the `Send()` API
 
+**Status:** ✅ **Shipped** (PR #3) — implemented as specified below: CSV upload (≤20 rows), `Send()` parallel research with fan-in, sequential personalization, and a live "Research X/N · Personalizing Y/N" progress view. Each prospect reuses the existing Result page for review/send.
+
 **Problem:** v1 processes one prospect at a time. A user with 20 prospects to reach out to this week submits 20 individual generate requests and waits for each to complete sequentially.
 
 **v2 behaviour:** User uploads a CSV of prospect companies (up to 20 rows). A single batch job fans out: the Research Agent runs in parallel across all prospects simultaneously using LangGraph's `Send()` API. Once all research tasks complete (fan-in), personalisation runs sequentially for each prospect — sequential because the OpenAI API has rate limits and personalisation benefits from focused context. The user sees a batch progress view: "Research: 18/20 complete. Personalizing: 6/20."

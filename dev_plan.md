@@ -190,7 +190,7 @@ All bugs found and fixed during the first real end-to-end run. All fixes are com
 | O5 | v2 — Low-confidence research pause | `interrupt()` + human-in-the-loop mid-graph |
 | O6 | v2 — Draft quality self-critique loop | Conditional exit edges |
 | O7 | v2 — Resumable runs after failure | Postgres checkpointer |
-| O8 | v2 — Batch multi-prospect processing | `Send()` fan-out API |
+| ~~O8~~ | ✅ v2 — Batch multi-prospect processing | **Shipped** (PR #3) — `Send()` fan-out: parallel research → sequential personalization, live progress view |
 
 ---
 
@@ -201,4 +201,4 @@ See `prd_mini_crm_ai_crew_v2.md` → v2 Roadmap for the 4 LangGraph-specific fea
 1. Low-Confidence Research Pause — `interrupt()` + conditional edges
 2. Draft Quality Self-Critique Loop — cycles with conditional exit edges
 3. Resumable Runs After Failure — Postgres checkpointer
-4. Batch Multi-Prospect Processing — `Send()` fan-out API
+4. Batch Multi-Prospect Processing — `Send()` fan-out API ✅ **Shipped** (PR #3)
