@@ -93,19 +93,19 @@ export function ResultPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{job.company_name}</h1>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold break-words">{job.company_name}</h1>
           {job.contact_name && <p className="text-muted-foreground">{job.contact_name}</p>}
         </div>
         <ConfidenceBadge level={job.data_confidence} />
       </div>
 
       {job.status === 'failed' && (
-        <div className="flex items-start gap-2 p-4 rounded-md bg-destructive/10 text-destructive text-sm">
+        <div className="flex flex-wrap items-start gap-2 p-4 rounded-md bg-destructive/10 text-destructive text-sm">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-          <div><p className="font-medium">Job failed</p><p>{job.error_message}</p></div>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
+          <div className="min-w-0 flex-1 basis-48"><p className="font-medium">Job failed</p><p className="break-words">{job.error_message}</p></div>
+          <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
             <RefreshCw className="h-3 w-3 mr-1" />Retry
           </Button>
         </div>
@@ -131,7 +131,7 @@ export function ResultPage() {
           ) : (
             <>
               <div><p className="text-xs text-muted-foreground mb-1">Subject</p><p className="font-medium">{job.email_subject ?? '—'}</p></div>
-              <div><p className="text-xs text-muted-foreground mb-1">Body</p><pre className="whitespace-pre-wrap text-sm font-sans leading-relaxed">{job.email_draft ?? '—'}</pre></div>
+              <div><p className="text-xs text-muted-foreground mb-1">Body</p><pre className="whitespace-pre-wrap break-words text-sm font-sans leading-relaxed">{job.email_draft ?? '—'}</pre></div>
               <SendDialog jobId={job.id} disabled={alreadySent || job.status !== 'done'} />
             </>
           )}
@@ -164,7 +164,7 @@ export function ResultPage() {
                 <span><strong>Review before sending.</strong> {schedule.reason}</span>
               </div>
             )}
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
               <div><p className="text-xs text-muted-foreground">Recommended window</p><p className="font-medium">{schedule.recommended_window}</p></div>
               <div><p className="text-xs text-muted-foreground">Channel</p><p className="font-medium capitalize">{schedule.channel}</p></div>
             </div>
