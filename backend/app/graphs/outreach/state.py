@@ -1,4 +1,14 @@
-"""OutreachState — shared state TypedDict for the Outreach LangGraph."""
+"""OutreachState — shared state TypedDict for the Outreach LangGraph.
+
+In plain English:
+- Think of this as the shared "clipboard" every node in the outreach graph
+  reads from and writes to. As the flow runs, fields get filled in.
+- ``messages`` is special: the ``Annotated[..., operator.add]`` means new
+  messages are APPENDED to the list rather than replacing it, so the running
+  conversation with the LLM is never lost between steps.
+- The comments below group fields by which node fills them in (input →
+  research → personalize → schedule).
+"""
 
 import operator
 from typing import Annotated, TypedDict

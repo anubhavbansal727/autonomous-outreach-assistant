@@ -1,5 +1,13 @@
 """BatchState — shared state for the batch multi-prospect LangGraph.
 
+In plain English:
+- The shared "clipboard" for the batch graph. ``prospects`` is the to-do list
+  (one ``ResearchTask`` per CSV row); ``research_results`` is where finished
+  research lands.
+- ``research_results`` uses ``Annotated[..., operator.add]`` so each parallel
+  research branch APPENDS its one result instead of overwriting the list — that
+  is how many parallel branches safely merge their output back together.
+
 The batch graph fans out research across all prospects in parallel via the
 Send() API, then runs personalisation sequentially at fan-in. Per-branch
 research outputs accumulate into ``research_results`` via the operator.add

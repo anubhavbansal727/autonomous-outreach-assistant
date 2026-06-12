@@ -1,3 +1,12 @@
+"""routers/health.py — a tiny "are you alive?" endpoint (/health).
+
+In plain English:
+- Hosting platforms (Railway) ping ``GET /health`` repeatedly. If it stops
+  returning 200, they assume the app crashed and restart it.
+- It deliberately does NO database or Redis check and returns instantly — see
+  the function docstring for why touching the DB here causes false alarms.
+"""
+
 from fastapi import APIRouter
 
 from app.models.schemas import HealthResponse

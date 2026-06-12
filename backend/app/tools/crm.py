@@ -1,3 +1,14 @@
+"""tools/crm.py — the "check our sales pipeline" tool the scheduling agent calls.
+
+In plain English:
+- A ``@tool`` the scheduling step uses to ask "do we already have a relationship
+  with this prospect?" If yes, the agent flags the draft for a human to review
+  before sending (so we don't blast a cold email at an active deal).
+- The pipeline here is hardcoded demo data. In a real product this would query
+  the actual CRM/database. (Note: app/routers/crm.py serves similar mock data
+  to the frontend — this one is purely for the AI agent.)
+"""
+
 import json
 
 from langchain_core.tools import tool

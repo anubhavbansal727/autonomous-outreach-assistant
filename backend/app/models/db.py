@@ -1,5 +1,18 @@
 """SQLAlchemy async ORM models for Mini CRM AI Crew.
 
+In plain English (read this first):
+- This file defines the database TABLES as Python classes. One class = one
+  table; one attribute = one column.
+- The five tables: ``User`` (login accounts), ``ProductProfile`` (what the
+  user is selling), ``IngestionJob`` (a website-scrape-to-profile run),
+  ``OutreachJob`` (one generated email/LinkedIn draft — the central record),
+  and ``BatchJob`` (a parent row for a CSV of many prospects).
+- ``CheckConstraint``s make the database itself reject invalid values (e.g. a
+  status that isn't 'running'/'done'/'failed'). The rules live in the DB, not
+  just in Python.
+- ``relationship(...)`` lines let you hop from one row to related rows in
+  Python (e.g. a user's jobs); they don't create columns.
+
 All tables:
 - Use UUID primary keys with server_default=gen_random_uuid()
 - Use TIMESTAMPTZ for all datetime columns

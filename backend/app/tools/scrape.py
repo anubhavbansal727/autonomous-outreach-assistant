@@ -1,3 +1,15 @@
+"""tools/scrape.py — the "read a web page" tool the research agent can call.
+
+In plain English:
+- Another ``@tool`` the LLM can invoke (see tools/search.py for what @tool
+  means). When the agent wants to read a specific page in depth, it calls this.
+- It launches a headless Chromium browser via Playwright, opens the URL, and
+  returns the visible body text (capped at 10,000 characters).
+- Because it runs a real browser, this is heavy — which is why only the WORKER
+  image installs Playwright, not the API. On any error it returns a
+  "SCRAPE_FAILED: ..." string instead of raising.
+"""
+
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 

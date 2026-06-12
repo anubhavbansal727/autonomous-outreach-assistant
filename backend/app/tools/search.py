@@ -1,3 +1,15 @@
+"""tools/search.py — the "search the web" tool the research agent can call.
+
+In plain English:
+- A "tool" is a function the LLM is allowed to invoke when it needs outside
+  information. The ``@tool`` decorator + the docstring tell the LLM what it does
+  and when to use it (the LLM literally reads that docstring to decide).
+- This one calls the Serper API (a Google-search-as-an-API) and returns the
+  titles, snippets and links as text the LLM can read.
+- It never raises on failure; it returns a "SEARCH_FAILED: ..." string so the
+  agent can notice and carry on instead of crashing the whole job.
+"""
+
 import json
 
 import httpx

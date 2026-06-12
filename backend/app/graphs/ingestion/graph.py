@@ -1,5 +1,17 @@
 """IngestionGraph — LangGraph StateGraph for product profile extraction.
 
+In plain English (read this first):
+- This is the simplest graph: just two steps in a straight line, no loops.
+- ``scrape_node``: visit a few standard pages of the user's website
+  (home, /pricing, /about, /customers, /case-studies) and grab their text.
+  This is plain Playwright code — no AI.
+- ``extract_node``: feed all that text to GPT-4o and have it fill in a
+  structured product profile (name, one-liner, pain points, etc.). It uses
+  ``with_structured_output`` so the answer comes back as a typed object, and it
+  is told to NOT invent details and to list whatever it couldn't find.
+- The result becomes the ProductProfile the user can save and then use for
+  every outreach email.
+
 Graph topology
 --------------
 

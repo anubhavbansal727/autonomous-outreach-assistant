@@ -1,3 +1,18 @@
+"""auth/dependencies.py — how we know WHO is making a request (JWT auth).
+
+In plain English:
+- ``create_access_token`` / ``create_refresh_token`` mint signed JWTs. A JWT is
+  a tamper-proof string that says "this is user X, valid until time Y",
+  signed with our secret so nobody can forge one.
+- An ACCESS token is short-lived (30 min) and sent on every request. A REFRESH
+  token is long-lived (7 days) and only used to get a new access token.
+- ``get_current_user`` is the gatekeeper: routers add it as a dependency
+  (``Depends(get_current_user)``). It reads the "Authorization: Bearer <token>"
+  header, verifies the signature, loads that user from the DB, and either
+  returns the User or raises 401. If you see it on an endpoint, that endpoint
+  requires login.
+"""
+
 from datetime import datetime, timezone, timedelta
 
 from fastapi import Depends, HTTPException, status

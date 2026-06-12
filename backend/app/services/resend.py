@@ -1,3 +1,17 @@
+"""services/resend.py — actually sends the finished email via the Resend API.
+
+In plain English:
+- Everything else just DRAFTS emails. This is the one place that puts a real
+  message in someone's inbox. It's called from the POST /outreach/send endpoint.
+- ``send_email`` builds the message (plain text + a simple HTML version),
+  attaches the legally-required unsubscribe headers (CAN-SPAM / one-click
+  unsubscribe), and hands it to Resend.
+- The Resend SDK is blocking (a normal HTTP call), so we run it in a thread
+  (``run_in_executor``) to avoid freezing the async event loop.
+- If the user hasn't verified their own sending domain, we fall back to
+  Resend's shared test address.
+"""
+
 import asyncio
 import logging
 from functools import partial

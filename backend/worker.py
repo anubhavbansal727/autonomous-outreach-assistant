@@ -1,3 +1,24 @@
+"""worker.py — the background worker process (the "kitchen" behind the API).
+
+In plain English:
+- This is a SEPARATE program from the web API. You run it with
+  ``python worker.py``. It connects to the same Redis and waits for jobs the
+  API dropped on the queue, then runs them.
+- ``WorkerSettings.functions`` is the allow-list of jobs it knows how to run:
+  ingestion, single outreach, and batch. The string names here must match the
+  names the API passes to ``enqueue_job(...)``.
+- The settings below are the safety rails:
+    * ``max_jobs=10``    — run up to 10 jobs at once
+    * ``job_timeout=120``— kill a job after 120s (default)
+    * ``max_tries=3`` + ``retry_jobs=True`` — auto-retry a failed job up to 3x
+- WHY the batch job overrides these (the ``func(...)`` line): a 20-prospect
+  batch can take longer than 120s, and retrying a half-finished batch would
+  redo/duplicate work — so it gets a 10-minute timeout and NO retries.
+
+Deployment detail: the worker image installs Playwright (a real browser) for
+scraping and gets more memory; the API image stays small. See docker-compose.yml.
+"""
+
 import logging
 import sys
 

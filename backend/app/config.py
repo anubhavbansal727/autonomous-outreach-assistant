@@ -1,3 +1,15 @@
+"""config.py — all settings/secrets for the app, in one place.
+
+In plain English:
+- ``Settings`` reads configuration from environment variables (or a local
+  ``.env`` file) ONCE at startup: API keys, the database URL, the Redis URL,
+  JWT secret, CORS origins, etc.
+- Every other file imports the single shared ``settings`` object at the bottom
+  instead of reading os.environ directly. Change a value in one place.
+- The two ``@field_validator`` / ``@property`` helpers just clean up messy
+  input (e.g. fix the database URL scheme, split CORS origins on commas).
+"""
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

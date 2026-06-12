@@ -1,5 +1,19 @@
 """OutreachGraph — LangGraph StateGraph for B2B outreach generation.
 
+In plain English (read this first):
+- A "graph" here is a flowchart of steps the AI walks through. Each box is a
+  "node" (a function), and arrows ("edges") decide what runs next.
+- This graph does three jobs in order: RESEARCH the company → write the
+  PERSONALISED email/LinkedIn note → decide the best SEND TIME.
+- The research and schedule steps are "ReAct loops": the LLM can ask to use a
+  tool (web search, scrape a site, check the CRM), we run the tool, feed the
+  result back, and let it decide again — looping until it has an answer.
+- Two rules the whole file follows: (1) nodes never call tools themselves —
+  they return a message and a separate ToolNode runs the tool; (2) when we want
+  structured data back, we use ``llm.with_structured_output(SomeModel)`` so the
+  LLM's answer is forced into a typed object, not free text we'd have to parse.
+- The actual flowchart is drawn below.
+
 Graph topology
 --------------
 

@@ -1,3 +1,19 @@
+"""jobs/ingestion_job.py — the background job that turns a URL into a profile.
+
+In plain English:
+- This runs in the WORKER, not the web request. The /profile/ingest endpoint
+  enqueues "run_ingestion_job"; ARQ calls the function below.
+- It drives the ingestion LangGraph (app/graphs/ingestion/) which scrapes the
+  site and uses an LLM to extract a product profile, then writes the result
+  onto the IngestionJob database row.
+- ``_update_step`` writes the current step ("scraping" → "extracting") to the DB
+  in its own little transaction so the frontend's polling sees progress live.
+- MOCK_MODE swaps the real LLM/scraper for canned fixture files — handy for
+  demos and tests without spending API credits.
+
+The "ctx" first argument is supplied by ARQ; we don't use it here.
+"""
+
 import asyncio
 import json
 from datetime import datetime, timezone

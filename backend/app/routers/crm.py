@@ -1,3 +1,14 @@
+"""routers/crm.py — a stand-in "sales pipeline" endpoint (/crm/pipeline).
+
+In plain English:
+- A real CRM (HubSpot/Salesforce) would live here. For this portfolio project
+  the pipeline is hardcoded demo data (``_MOCK_PIPELINE``).
+- ``GET /crm/pipeline`` returns those records to the frontend.
+- Separately, the scheduling AI agent checks a similar mock list via the
+  ``get_crm_pipeline`` tool (app/tools/crm.py) to decide if a prospect is
+  already a known deal and should be flagged for human review.
+"""
+
 from fastapi import APIRouter, Depends
 
 from app.auth.dependencies import get_current_user

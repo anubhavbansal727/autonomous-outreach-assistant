@@ -1,3 +1,17 @@
+"""routers/auth.py — signup / login / logout endpoints (URLs under /auth).
+
+In plain English:
+- ``/register`` creates an account. Passwords are never stored as-is — bcrypt
+  hashes them (one-way, salted) so a database leak doesn't expose passwords.
+- ``/login`` checks the password and, on success, returns an access token plus
+  sets the refresh token as a secure http-only cookie (JavaScript can't read
+  it, which limits theft).
+- ``/refresh`` swaps a valid refresh cookie for a fresh access token.
+- ``/me`` (GET) returns the logged-in user; ``/me`` (PATCH) lets them set their
+  email sending domain.
+The token-minting/checking helpers live in app/auth/dependencies.py.
+"""
+
 import uuid
 
 import bcrypt

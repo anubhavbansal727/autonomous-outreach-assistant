@@ -1,3 +1,18 @@
+"""services/rate_limiter.py — stops one user from hammering expensive endpoints.
+
+In plain English:
+- Each AI run costs money (LLM + scraping), so we cap how many a user may start
+  per hour. Generate = 10/hour, ingest = 10/hour, batch = 2/hour. Different
+  buckets per action.
+- The technique is a "sliding window" counter stored in Redis:
+    * We keep a sorted set per user where each past request is one entry,
+      scored by its timestamp.
+    * On a new request we delete entries older than the window, count what's
+      left, and allow the request only if the count is under the limit.
+- Returns ``(allowed, retry_after_seconds)`` so the router can return a 429 with
+  a helpful "try again in N seconds" message.
+"""
+
 import time
 
 from redis.asyncio import Redis

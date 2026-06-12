@@ -1,5 +1,18 @@
 """BatchGraph — dynamic fan-out / fan-in over the existing OutreachGraph nodes.
 
+In plain English (read this first):
+- This handles a CSV of MANY prospects at once. The trick: it reuses the exact
+  same node functions from the single-outreach graph — no AI logic is copied.
+- "Fan-out": it researches every prospect in PARALLEL (the ``Send()`` calls),
+  capped at 5 at a time so we don't open 20 browsers at once.
+- "Fan-in": once all research is done, ``personalize_sequential`` runs ONCE and
+  writes a draft for each prospect, one after another, in CSV order.
+- Important difference from the single flow: here the NODES write progress to
+  the database directly (the "Research 3/20 · Personalizing 1/20" counters),
+  using atomic ``col = col + 1`` SQL so parallel branches don't overwrite each
+  other's count.
+- The flowchart is drawn below.
+
 Topology
 --------
 

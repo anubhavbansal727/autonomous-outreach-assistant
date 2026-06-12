@@ -1,3 +1,22 @@
+"""jobs/outreach_job.py — the background job that generates ONE outreach.
+
+In plain English:
+- Runs in the WORKER. The /outreach/generate endpoint enqueues
+  "run_outreach_job"; ARQ calls the function below with the company name and
+  the user's product profile.
+- It drives the outreach LangGraph (app/graphs/outreach/) which: researches the
+  company → writes a personalised email + LinkedIn note → picks a good send
+  time. Then it saves the drafts onto the OutreachJob row and marks it "done".
+- ``_update_step`` commits each step ("researching" → "personalizing" →
+  "scheduling") in its OWN transaction so the polling UI sees progress
+  immediately (see the docstring there for the subtle bug this avoids).
+- ``astream`` streams the graph one node at a time; we MERGE each node's output
+  into ``accumulated_state`` because each event only carries that node's piece,
+  not the whole picture.
+- If anything throws, we mark the job "failed", bump retry_count, and re-raise
+  so ARQ's retry policy can kick in.
+"""
+
 import asyncio
 import json
 import logging

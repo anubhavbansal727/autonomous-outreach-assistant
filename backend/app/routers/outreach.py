@@ -1,3 +1,26 @@
+"""routers/outreach.py — the heart of the app: generating & sending outreach.
+
+This is the busiest router. In plain English, the lifecycle of one outreach is:
+1) ``POST /generate`` — validate input, check the rate limit, create an
+   OutreachJob row marked "running", enqueue the background job, and return a
+   job_id IMMEDIATELY (HTTP 202). The slow AI work happens in the worker, not
+   here.
+2) The frontend polls ``GET /status/{job_id}`` to watch progress
+   (researching → personalizing → scheduling), then calls
+   ``GET /result/{job_id}`` to fetch the finished drafts.
+3) The user can ``PUT /result/{job_id}`` to edit a draft, then
+   ``POST /send/{job_id}`` to actually email it (via services/resend.py).
+4) Extras: ``/retry`` re-runs a failed job, ``/history`` lists past jobs,
+   ``DELETE /{job_id}`` removes one.
+
+BATCH mode (``POST /batch`` + ``GET /batch/{batch_id}``) does the same thing for
+a whole CSV of prospects at once — one BatchJob parent row plus one child
+OutreachJob per prospect.
+
+Note the pattern repeated everywhere: create the DB row FIRST, then enqueue the
+job. That way the row exists before the worker touches it.
+"""
+
 import csv
 import io
 import logging

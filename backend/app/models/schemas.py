@@ -1,3 +1,18 @@
+"""schemas.py — the shapes of data going IN and OUT of the API (Pydantic models).
+
+In plain English:
+- These are NOT database tables (those live in models/db.py). These describe
+  the JSON bodies of requests and responses.
+- ``...Request`` classes validate what a client SENDS us (e.g. a password must
+  be >= 8 chars, a company_name may only contain certain characters). Bad input
+  is rejected automatically with a 422 before our code ever runs.
+- ``...Response`` classes define exactly what we send BACK, so the frontend
+  knows what to expect. ``from_attributes=True`` lets a response be built
+  straight from a database row object.
+- Sections below mirror the routers: Auth, Profile, Outreach, Batch, CRM,
+  Health, Error.
+"""
+
 from datetime import datetime
 from typing import Any
 import uuid

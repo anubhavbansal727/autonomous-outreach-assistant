@@ -1,3 +1,17 @@
+"""routers/profile.py — managing the user's "what I'm selling" profile (/profile).
+
+In plain English, two things happen here:
+1) INGESTION: ``POST /ingest`` takes a company website URL and kicks off a
+   background job (run_ingestion_job) that scrapes the site and uses an LLM to
+   draft a structured product profile. The endpoint returns immediately with a
+   job_id; the frontend polls ``GET /result/{job_id}`` until it's done.
+2) PROFILE CRUD: ``GET ""`` reads the active profile, ``POST /save`` stores one
+   (deactivating any previous one — each user has exactly one active profile),
+   ``PUT /update`` edits it.
+The saved profile is later fed into every outreach email so the AI knows what
+the user sells.
+"""
+
 import uuid
 from datetime import datetime, timezone
 

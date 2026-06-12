@@ -1,3 +1,19 @@
+"""jobs/batch_job.py — the background job for a whole CSV of prospects.
+
+In plain English:
+- Runs in the WORKER. The /outreach/batch endpoint uploads a CSV, creates one
+  BatchJob parent row plus one child OutreachJob per prospect, then enqueues
+  "run_batch_job"; ARQ calls the function below.
+- It drives the BATCH LangGraph (app/graphs/batch/) which researches all
+  prospects in PARALLEL, then writes a personalised draft for each one.
+- Unlike the single-outreach job, here the GRAPH NODES write progress to the DB
+  themselves (the per-prospect counters), so this wrapper mostly just runs the
+  graph to completion and then marks the whole batch "done".
+- On failure it marks both the batch AND any still-"running" children as
+  "failed", so no prospect is left stuck forever. Remember: this job is
+  configured with NO retries (see worker.py) so a half-done batch isn't redone.
+"""
+
 import asyncio
 import json
 import logging

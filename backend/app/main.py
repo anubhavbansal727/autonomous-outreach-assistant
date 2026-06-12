@@ -1,3 +1,20 @@
+"""main.py — the FastAPI application entry point ("the front door").
+
+In plain English:
+- This builds the web-server object (``app``) that answers HTTP requests from
+  the React frontend.
+- It turns on CORS (so the browser is allowed to call us) and registers every
+  group of endpoints — auth, profile, outreach, crm, health — each of which
+  lives in its own file under app/routers/.
+- ``lifespan`` holds startup/shutdown hooks. On shutdown we close all database
+  connections cleanly. (The database tables themselves are created by Alembic
+  migrations, not here.)
+
+Where it fits in the system: the browser talks to THIS process. Anything slow
+or AI-heavy is NOT done inside a request here — it is handed off to the
+background worker (see worker.py) so requests stay fast.
+"""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
