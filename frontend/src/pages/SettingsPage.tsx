@@ -11,13 +11,17 @@ export function SettingsPage() {
   const [domain, setDomain] = useState(user?.resend_domain ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSaveDomain = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true); setSaved(false)
+    e.preventDefault(); setSaving(true); setSaved(false); setError('')
     try {
       await apiFetch('/auth/me', { method: 'PATCH', body: JSON.stringify({ resend_domain: domain }) })
       setSaved(true)
-    } catch {}
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err: unknown) {
+      setError((err as { error?: string })?.error ?? 'Failed to save domain')
+    }
     finally { setSaving(false) }
   }
 
@@ -41,6 +45,7 @@ export function SettingsPage() {
               <p className="text-xs text-muted-foreground">Must be verified in your Resend account before sending emails.</p>
             </div>
             {saved && <p className="text-sm text-green-600">Saved!</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save domain'}</Button>
           </form>
         </CardContent>

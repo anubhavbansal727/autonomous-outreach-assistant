@@ -18,24 +18,25 @@ export function Sidebar() {
   const handleLogout = () => { logout(); navigate('/login') }
 
   return (
-    <aside className="w-full sm:w-56 sm:min-h-screen border-b sm:border-b-0 sm:border-r bg-card flex flex-col">
+    <aside className="w-16 md:w-56 shrink-0 h-full border-r bg-card flex flex-col">
       <div className="p-4 border-b">
-        <h1 className="font-bold text-lg text-primary">AI Outreach</h1>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{user?.email}</p>
+        <h1 className="font-bold text-lg text-primary hidden md:block">AI Outreach</h1>
+        <Zap className="h-5 w-5 mx-auto text-primary md:hidden" aria-label="AI Outreach" />
+        <p className="text-xs text-muted-foreground truncate mt-0.5 hidden md:block">{user?.email}</p>
       </div>
-      <nav className="flex-1 p-3 flex flex-row sm:flex-col gap-1 overflow-x-auto">
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
         {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === '/'}
-            className={({ isActive }) => cn('flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 whitespace-nowrap',
+          <NavLink key={to} to={to} end={to === '/'} title={label}
+            className={({ isActive }) => cn('flex items-center justify-center md:justify-start gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}>
-            <Icon className="h-4 w-4" />{label}
+            <Icon className="h-4 w-4 shrink-0" /><span className="hidden md:inline">{label}</span>
           </NavLink>
         ))}
       </nav>
       <div className="p-3 border-t">
-        <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
-          <LogOut className="h-4 w-4" />Logout
+        <button onClick={handleLogout} title="Logout" className="flex items-center justify-center md:justify-start gap-3 px-3 py-2 w-full rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+          <LogOut className="h-4 w-4 shrink-0" /><span className="hidden md:inline">Logout</span>
         </button>
       </div>
     </aside>

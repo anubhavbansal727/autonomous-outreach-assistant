@@ -50,7 +50,7 @@ def _hash(password: str) -> str:
 
 
 def _load_json(name: str) -> dict | list:
-    return json.loads((FIXTURES_DIR / name).read_text())
+    return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
 
 
 def _utc_days_ago(n: int) -> datetime:

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { apiFetch } from '@/api/client'
 import { useJobPolling } from '@/hooks/useJobPolling'
@@ -15,7 +15,7 @@ const STEP_LABELS: Record<string, string> = {
   scheduling: 'Recommending send time', complete: 'Done',
 }
 
-function OutreachStepper({ jobId }: { jobId: string }) {
+function OutreachStepper({ jobId, onReset }: { jobId: string; onReset: () => void }) {
   const navigate = useNavigate()
   const { data } = useJobPolling(jobId, (result) => {
     if (result.status === 'done') navigate(`/result/${jobId}`)
@@ -44,7 +44,12 @@ function OutreachStepper({ jobId }: { jobId: string }) {
           )
         })}
       </div>
-      {failed && <p className="text-sm text-destructive">Job failed. <a href={`/result/${jobId}`} className="underline">View details</a></p>}
+      {failed && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-destructive">Job failed. <Link to={`/result/${jobId}`} className="underline">View details</Link></p>
+          <Button size="sm" variant="outline" onClick={onReset}>Try again</Button>
+        </div>
+      )}
     </CardContent></Card>
   )
 }
@@ -67,15 +72,15 @@ export function GeneratePage() {
       <p className="text-muted-foreground mb-6">Enter the prospect's company and we'll research, personalise, and schedule outreach for you.</p>
       <Card><CardContent className="pt-6">
         <form onSubmit={e => { e.preventDefault(); mutation.mutate() }} className="space-y-4">
-          <div className="space-y-1"><Label>Company name *</Label><Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" required /></div>
-          <div className="space-y-1"><Label>Contact name <span className="text-muted-foreground">(optional)</span></Label><Input value={contact} onChange={e => setContact(e.target.value)} placeholder="Jane Smith" /></div>
+          <div className="space-y-1"><Label>Company name *</Label><Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" required disabled={!!jobId} /></div>
+          <div className="space-y-1"><Label>Contact name <span className="text-muted-foreground">(optional)</span></Label><Input value={contact} onChange={e => setContact(e.target.value)} placeholder="Jane Smith" disabled={!!jobId} /></div>
           {mutation.error && <p className="text-sm text-destructive">{(mutation.error as { error?: string })?.error ?? 'Failed to start'}</p>}
           <Button type="submit" className="w-full" disabled={mutation.isPending || !!jobId}>
-            {mutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting...</> : 'Generate outreach'}
+            {mutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting...</> : jobId ? 'Generating…' : 'Generate outreach'}
           </Button>
         </form>
       </CardContent></Card>
-      {jobId && <OutreachStepper jobId={jobId} />}
+      {jobId && <OutreachStepper jobId={jobId} onReset={() => { setJobId(null); mutation.reset() }} />}
     </div>
   )
 }

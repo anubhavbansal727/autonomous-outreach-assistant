@@ -43,7 +43,7 @@ async def _run_mock_ingestion(job_id: str) -> None:
     await _update_step(job_id, "extracting")
     await asyncio.sleep(2)
 
-    profile_data = json.loads((fixtures_dir / "product_profile.json").read_text())
+    profile_data = json.loads((fixtures_dir / "product_profile.json").read_text(encoding="utf-8"))
 
     async with AsyncSessionLocal() as db:
         await db.execute(

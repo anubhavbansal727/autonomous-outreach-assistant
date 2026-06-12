@@ -81,6 +81,7 @@ export function OnboardingPage() {
   const [urlError, setUrlError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [draft, setDraft] = useState<ProfileDraft>(EMPTY_DRAFT)
 
@@ -155,6 +156,7 @@ export function OnboardingPage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingProfile(true)
+    setSaveError('')
     try {
       if (isEditing) {
         await apiFetch('/profile/update', { method: 'PUT', body: JSON.stringify(draft) })
@@ -163,7 +165,7 @@ export function OnboardingPage() {
       }
       navigate('/generate')
     } catch (err: unknown) {
-      alert((err as { error?: string })?.error ?? 'Failed to save profile')
+      setSaveError((err as { error?: string })?.error ?? 'Failed to save profile')
     } finally { setSavingProfile(false) }
   }
 
@@ -246,6 +248,9 @@ export function OnboardingPage() {
             <Textarea value={draft.avoid_messaging} onChange={e => setDraft(d => ({ ...d, avoid_messaging: e.target.value }))} placeholder="e.g. pricing comparisons, competitor names..." rows={2} />
           </div>
         </CardContent></Card>
+        {saveError && (
+          <p className="flex items-center gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{saveError}</p>
+        )}
         <Button type="submit" className="w-full" disabled={savingProfile}>
           {savingProfile ? 'Saving...' : isEditing ? 'Save changes' : 'Save profile & continue'}
         </Button>
