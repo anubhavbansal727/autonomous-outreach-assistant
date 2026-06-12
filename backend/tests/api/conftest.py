@@ -26,6 +26,7 @@ USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 PROFILE_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 JOB_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 BATCH_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
+TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 CREATED_AT = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
@@ -145,15 +146,38 @@ def make_batch_job(
 # ---------------------------------------------------------------------------
 
 
+def make_tenant(tenant_id=None, name="Test Workspace", resend_domain=None):
+    """Return a MagicMock that looks like a Tenant ORM row."""
+    t = MagicMock()
+    t.id = tenant_id or TENANT_ID
+    t.name = name
+    t.resend_domain = resend_domain
+    t.created_at = CREATED_AT
+    return t
+
+
 @pytest.fixture
-def fake_user():
-    """MagicMock representing an authenticated User ORM row."""
+def fake_tenant():
+    """MagicMock representing the authenticated user's Tenant."""
+    return make_tenant()
+
+
+@pytest.fixture
+def fake_user(fake_tenant):
+    """MagicMock representing an authenticated User ORM row.
+
+    Includes the tenant context attributes (tenant_id / role / tenant) that
+    get_current_user attaches after resolving the membership.
+    """
     user = MagicMock()
     user.id = USER_ID
     user.email = "test@example.com"
-    user.resend_domain = None
+    user.must_change_password = False
     user.created_at = CREATED_AT
     user.password_hash = "$2b$12$fakehash"  # not used in authed routes
+    user.tenant_id = TENANT_ID
+    user.role = "owner"
+    user.tenant = fake_tenant
     return user
 
 

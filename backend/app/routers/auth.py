@@ -1,8 +1,10 @@
 """routers/auth.py — signup / login / logout endpoints (URLs under /auth).
 
 In plain English:
-- ``/register`` creates an account. Passwords are never stored as-is — bcrypt
-  hashes them (one-way, salted) so a database leak doesn't expose passwords.
+- ``/register`` creates an account AND a brand-new tenant (company workspace),
+  making the registrant its Owner — this is the only self-service signup path.
+  Passwords are never stored as-is — bcrypt hashes them (one-way, salted) so a
+  database leak doesn't expose passwords.
 - ``/login`` checks the password and, on success, returns an access token plus
   sets the refresh token as a secure http-only cookie (JavaScript can't read
   it, which limits theft).
@@ -26,8 +28,8 @@ from app.auth.dependencies import (
     get_current_user,
 )
 from app.config import settings
-from app.db.session import get_db
-from app.models.db import User
+from app.db.session import bind_tenant_context, get_db
+from app.models.db import Membership, Tenant, User
 from app.models.schemas import (
     LoginRequest,
     LogoutResponse,
@@ -63,11 +65,22 @@ async def register(
             detail={"error": "Email already registered", "code": "EMAIL_EXISTS"},
         )
 
+    # Registering bootstraps a brand-new tenant with this user as its Owner.
+    # IDs are generated client-side so the RLS context can be bound before the
+    # INSERTs (the policies' WITH CHECK applies to new rows too).
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    await bind_tenant_context(db, tenant_id=tenant_id, user_id=user_id)
+
+    local_part = body.email.split("@", 1)[0]
+    db.add(Tenant(id=tenant_id, name=f"{local_part}'s workspace"))
     user = User(
+        id=user_id,
         email=body.email,
         password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
     )
     db.add(user)
+    db.add(Membership(tenant_id=tenant_id, user_id=user_id, role="owner"))
     await db.flush()
     await db.refresh(user)
     await db.commit()
@@ -147,12 +160,17 @@ async def logout(response: Response) -> LogoutResponse:
     return LogoutResponse()
 
 
+# resend_domain moved from users to tenants in v3 — it is shared sending
+# config for the whole workspace. These endpoints keep their response shape
+# but now read/write the tenant's value.
+
+
 @router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
 async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
     return MeResponse(
         user_id=current_user.id,
         email=current_user.email,
-        resend_domain=current_user.resend_domain,
+        resend_domain=current_user.tenant.resend_domain if current_user.tenant else None,
         created_at=current_user.created_at,
     )
 
@@ -163,13 +181,12 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MeResponse:
-    if body.resend_domain is not None:
-        current_user.resend_domain = body.resend_domain or None
+    if body.resend_domain is not None and current_user.tenant is not None:
+        current_user.tenant.resend_domain = body.resend_domain or None
     await db.commit()
-    await db.refresh(current_user)
     return MeResponse(
         user_id=current_user.id,
         email=current_user.email,
-        resend_domain=current_user.resend_domain,
+        resend_domain=current_user.tenant.resend_domain if current_user.tenant else None,
         created_at=current_user.created_at,
     )

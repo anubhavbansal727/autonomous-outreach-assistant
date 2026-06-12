@@ -61,10 +61,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/outreach", tags=["outreach"])
 
 
-async def _get_active_profile(db: AsyncSession, user_id: uuid.UUID) -> ProductProfile:
+async def _get_active_profile(db: AsyncSession, tenant_id: uuid.UUID) -> ProductProfile:
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.user_id == user_id,
+            ProductProfile.tenant_id == tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
@@ -185,9 +185,10 @@ async def generate(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.id)
+    profile = await _get_active_profile(db, current_user.tenant_id)
 
     job = OutreachJob(
+        tenant_id=current_user.tenant_id,
         user_id=current_user.id,
         company_name=body.company_name,
         contact_name=body.contact_name,
@@ -240,12 +241,13 @@ async def create_batch(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.id)
+    profile = await _get_active_profile(db, current_user.tenant_id)
 
     batch_id = uuid.uuid4()
     db.add(
         BatchJob(
             id=batch_id,
+            tenant_id=current_user.tenant_id,
             user_id=current_user.id,
             product_profile_id=profile.id,
             status="running",
@@ -259,6 +261,7 @@ async def create_batch(
         db.add(
             OutreachJob(
                 id=job_id,
+                tenant_id=current_user.tenant_id,
                 user_id=current_user.id,
                 product_profile_id=profile.id,
                 batch_id=batch_id,
@@ -452,18 +455,19 @@ async def send(
             detail={"error": "Already sent", "code": "ALREADY_SENT"},
         )
 
-    # Load the user's active profile to get product_name and resend_domain
+    # Load the tenant's active profile to get product_name
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.user_id == current_user.id,
+            ProductProfile.tenant_id == current_user.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
     profile = result.scalar_one_or_none()
 
-    # Fall back to resend.dev (Resend test domain) when the user hasn't
+    # Fall back to resend.dev (Resend test domain) when the tenant hasn't
     # configured a verified sending domain yet.
-    resend_domain = current_user.resend_domain or "resend.dev"
+    tenant_domain = current_user.tenant.resend_domain if current_user.tenant else None
+    resend_domain = tenant_domain or "resend.dev"
 
     product_name = profile.product_name if profile else "Our Product"
 
@@ -526,7 +530,7 @@ async def retry(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.id)
+    profile = await _get_active_profile(db, current_user.tenant_id)
 
     job.status = "running"
     job.current_step = None

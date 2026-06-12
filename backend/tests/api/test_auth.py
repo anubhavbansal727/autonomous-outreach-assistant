@@ -243,9 +243,8 @@ class TestMe:
 
 
 class TestUpdateMe:
-    async def test_patch_me_sets_resend_domain(self, authed_client, fake_user, mock_db):
-        fake_user.resend_domain = "mycompany.com"
-
+    async def test_patch_me_sets_resend_domain(self, authed_client, fake_tenant, mock_db):
+        # resend_domain lives on the tenant (shared sending config) in v3.
         resp = await authed_client.patch(
             "/auth/me",
             json={"resend_domain": "mycompany.com"},
@@ -254,11 +253,12 @@ class TestUpdateMe:
         assert resp.status_code == 200
         body = resp.json()
         assert body["resend_domain"] == "mycompany.com"
+        assert fake_tenant.resend_domain == "mycompany.com"
         mock_db.commit.assert_awaited_once()
 
-    async def test_patch_me_clears_resend_domain(self, authed_client, fake_user, mock_db):
-        # Empty string → router sets resend_domain = None
-        fake_user.resend_domain = None
+    async def test_patch_me_clears_resend_domain(self, authed_client, fake_tenant, mock_db):
+        # Empty string → router sets the tenant's resend_domain = None
+        fake_tenant.resend_domain = "old.com"
 
         resp = await authed_client.patch(
             "/auth/me",
@@ -267,6 +267,7 @@ class TestUpdateMe:
 
         assert resp.status_code == 200
         assert resp.json()["resend_domain"] is None
+        assert fake_tenant.resend_domain is None
 
     async def test_patch_me_without_auth_returns_403(self, anon_client):
         resp = await anon_client.patch("/auth/me", json={"resend_domain": "x.com"})

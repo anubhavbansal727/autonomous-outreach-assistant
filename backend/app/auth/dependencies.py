@@ -11,6 +11,10 @@ In plain English:
   header, verifies the signature, loads that user from the DB, and either
   returns the User or raises 401. If you see it on an endpoint, that endpoint
   requires login.
+- Multi-tenancy (v3): after loading the user it also resolves their tenant
+  membership, binds the Row-Level Security context for the request transaction
+  (see db/session.py::bind_tenant_context), and attaches ``tenant_id``,
+  ``role`` and ``tenant`` onto the returned User for routers to use.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -22,8 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.session import get_db
-from app.models.db import User
+from app.db.session import bind_tenant_context, get_db
+from app.models.db import Membership, Tenant, User
 
 bearer_scheme = HTTPBearer()
 
@@ -75,8 +79,35 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
+    # Bind the user GUC first: the memberships RLS policy lets a session read
+    # its OWN membership row by user_id before any tenant has been resolved.
+    await bind_tenant_context(db, user_id=user_id)
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+
+    membership_result = await db.execute(
+        select(Membership).where(Membership.user_id == user.id)
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "User has no tenant membership", "code": "NO_TENANT"},
+        )
+
+    await bind_tenant_context(db, tenant_id=membership.tenant_id)
+
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == membership.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+
+    # Attach tenant context for routers. (Interim shim — Phase 2 of the RBAC
+    # build replaces this with a proper RequestContext dependency.)
+    user.tenant_id = membership.tenant_id
+    user.role = membership.role
+    user.tenant = tenant
     return user

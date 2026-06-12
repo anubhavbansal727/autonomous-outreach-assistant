@@ -6,10 +6,10 @@ In plain English, two things happen here:
    draft a structured product profile. The endpoint returns immediately with a
    job_id; the frontend polls ``GET /result/{job_id}`` until it's done.
 2) PROFILE CRUD: ``GET ""`` reads the active profile, ``POST /save`` stores one
-   (deactivating any previous one — each user has exactly one active profile),
-   ``PUT /update`` edits it.
+   (deactivating any previous one — each TENANT has exactly one active
+   profile, shared by all its members), ``PUT /update`` edits it.
 The saved profile is later fed into every outreach email so the AI knows what
-the user sells.
+the company sells.
 """
 
 import uuid
@@ -45,7 +45,7 @@ async def get_profile(
 ) -> ProfileResponse:
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.user_id == current_user.id,
+            ProductProfile.tenant_id == current_user.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
@@ -96,6 +96,7 @@ async def ingest(
         )
 
     job = IngestionJob(
+        tenant_id=current_user.tenant_id,
         user_id=current_user.id,
         url=body.url,
         status="running",
@@ -125,10 +126,11 @@ async def get_ingestion_result(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> IngestionResultResponse:
+    # Ingestion jobs are tenant-shared config work, not private per member.
     result = await db.execute(
         select(IngestionJob).where(
             IngestionJob.id == job_id,
-            IngestionJob.user_id == current_user.id,
+            IngestionJob.tenant_id == current_user.tenant_id,
         )
     )
     job = result.scalar_one_or_none()
@@ -153,18 +155,19 @@ async def save_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SaveProfileResponse:
-    # Deactivate any existing active profile for this user
+    # Deactivate any existing active profile for this tenant
     await db.execute(
         update(ProductProfile)
         .where(
-            ProductProfile.user_id == current_user.id,
+            ProductProfile.tenant_id == current_user.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
         .values(is_active=False)
     )
 
     profile = ProductProfile(
-        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        created_by_user_id=current_user.id,
         product_name=body.product_name,
         one_liner=body.one_liner,
         target_customer=body.target_customer,
@@ -193,7 +196,7 @@ async def update_profile(
 ) -> UpdateProfileResponse:
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.user_id == current_user.id,
+            ProductProfile.tenant_id == current_user.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
