@@ -36,8 +36,8 @@ export function RegisterPage() {
         <CardHeader><CardTitle>Create account</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-            <div className="space-y-1"><Label>Password <span className="text-muted-foreground">(min 8 chars)</span></Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+            <div className="space-y-1"><Label>Email</Label><Input type="email" autoComplete="email" autoFocus value={email} onChange={e => setEmail(e.target.value)} required /></div>
+            <div className="space-y-1"><Label>Password <span className="text-muted-foreground">(min 8 chars)</span></Label><Input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Creating…' : 'Create account'}</Button>
             <p className="text-sm text-center text-muted-foreground">Have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link></p>

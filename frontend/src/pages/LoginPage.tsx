@@ -38,8 +38,8 @@ export function LoginPage() {
         <CardHeader><CardTitle>Sign in</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-            <div className="space-y-1"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+            <div className="space-y-1"><Label>Email</Label><Input type="email" autoComplete="email" autoFocus value={email} onChange={e => setEmail(e.target.value)} required /></div>
+            <div className="space-y-1"><Label>Password</Label><Input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button>
             <p className="text-sm text-center text-muted-foreground">No account? <Link to="/register" className="text-primary hover:underline">Register</Link></p>
