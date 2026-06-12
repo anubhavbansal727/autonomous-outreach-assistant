@@ -59,8 +59,8 @@ async def _run_mock_outreach(job_id: str) -> None:
         await _update_step(job_id, step)
         await asyncio.sleep(2)
 
-    draft = json.loads((fixtures_dir / "outreach_draft.json").read_text())
-    schedule = json.loads((fixtures_dir / "schedule_output.json").read_text())
+    draft = json.loads((fixtures_dir / "outreach_draft.json").read_text(encoding="utf-8"))
+    schedule = json.loads((fixtures_dir / "schedule_output.json").read_text(encoding="utf-8"))
 
     async with AsyncSessionLocal() as db:
         await db.execute(
