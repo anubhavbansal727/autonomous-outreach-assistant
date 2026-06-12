@@ -72,7 +72,7 @@ function ProgressBar({ label, done, total }: { label: string; done: number; tota
   )
 }
 
-function BatchProgress({ batchId }: { batchId: string }) {
+function BatchProgress({ batchId, onReset }: { batchId: string; onReset: () => void }) {
   const { data } = useBatchPolling(batchId)
   if (!data) {
     return <Card className="mt-6"><CardContent className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></CardContent></Card>
@@ -95,10 +95,16 @@ function BatchProgress({ batchId }: { batchId: string }) {
           </tbody>
         </table>
         {data.status === 'done' && (
-          <p className="text-sm text-green-600 font-medium">Batch complete — click any company to review and send.</p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-green-600 font-medium">Batch complete — click any company to review and send.</p>
+            <Button size="sm" variant="outline" onClick={onReset}>Start another batch</Button>
+          </div>
         )}
         {data.status === 'failed' && (
-          <p className="text-sm text-destructive">Batch failed. Some prospects may not have completed.</p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-destructive">Batch failed. Some prospects may not have completed.</p>
+            <Button size="sm" variant="outline" onClick={onReset}>Try again</Button>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -187,7 +193,7 @@ export function BatchPage() {
         </CardContent></Card>
       )}
 
-      {batchId && <BatchProgress batchId={batchId} />}
+      {batchId && <BatchProgress batchId={batchId} onReset={() => { setBatchId(null); setFile(null); setPreview(null); mutation.reset() }} />}
     </div>
   )
 }

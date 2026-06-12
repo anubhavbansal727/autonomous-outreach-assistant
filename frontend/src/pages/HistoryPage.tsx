@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch } from '@/api/client'
 import type { HistoryItem } from '@/types'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ function SendBadge({ status }: { status: string }) {
 }
 
 export function HistoryPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const perPage = 20
 
@@ -40,6 +41,7 @@ export function HistoryPage() {
           ) : !data?.items.length ? (
             <div className="text-center p-12 text-muted-foreground">No outreach jobs yet. <Link to="/generate" className="text-primary hover:underline">Generate your first one.</Link></div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b"><tr className="text-left">
                 {['Company', 'Contact', 'Status', 'Send status', 'Confidence', 'Created'].map(h => (
@@ -48,7 +50,8 @@ export function HistoryPage() {
               </tr></thead>
               <tbody>
                 {data.items.map((item, i) => (
-                  <tr key={item.id} className={`border-b last:border-0 hover:bg-muted/30 ${i % 2 === 0 ? '' : 'bg-muted/10'}`}>
+                  <tr key={item.id} onClick={() => navigate(`/result/${item.id}`)}
+                    className={`border-b last:border-0 hover:bg-muted/30 cursor-pointer ${i % 2 === 0 ? '' : 'bg-muted/10'}`}>
                     <td className="px-4 py-3"><Link to={`/result/${item.id}`} className="text-primary hover:underline font-medium">{item.company_name}</Link></td>
                     <td className="px-4 py-3 text-muted-foreground">{item.contact_name ?? '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={item.status} /></td>
@@ -59,6 +62,7 @@ export function HistoryPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </CardContent>
       </Card>

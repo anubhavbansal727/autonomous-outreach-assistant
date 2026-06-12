@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api/client'
 import type { OutreachJob } from '@/types'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { AlertCircle, Edit2, Send, RefreshCw, Calendar, Loader2 } from 'lucide-react'
+import { AlertCircle, Edit2, Send, RefreshCw, Calendar, Loader2, ArrowLeft } from 'lucide-react'
 
 function ConfidenceBadge({ level }: { level: string | null }) {
   if (!level) return null
@@ -93,6 +93,9 @@ export function ResultPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <Link to="/history" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ArrowLeft className="h-4 w-4" />Back to history
+      </Link>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">{job.company_name}</h1>
