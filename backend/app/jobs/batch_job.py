@@ -120,8 +120,8 @@ async def _run_real_batch(
 async def _run_mock_batch(batch_id: str, prospects: list[dict]) -> None:
     """Fixture-driven batch for MOCK_MODE: increment counters with delays."""
     fixtures_dir = pathlib.Path(__file__).parent.parent.parent / "fixtures"
-    draft = json.loads((fixtures_dir / "outreach_draft.json").read_text())
-    schedule = json.loads((fixtures_dir / "schedule_output.json").read_text())
+    draft = json.loads((fixtures_dir / "outreach_draft.json").read_text(encoding="utf-8"))
+    schedule = json.loads((fixtures_dir / "schedule_output.json").read_text(encoding="utf-8"))
 
     ordered = sorted(prospects, key=lambda p: p["index"])
 
