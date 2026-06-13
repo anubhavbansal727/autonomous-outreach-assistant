@@ -49,7 +49,17 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
 
   if (!res.ok) {
     let errBody: ApiError = { error: 'Request failed', code: 'UNKNOWN' }
-    try { errBody = await res.json() } catch {}
+    try {
+      const parsed = await res.json()
+      // FastAPI nests our error payload under `detail`.
+      errBody = (parsed?.detail ?? parsed) as ApiError
+    } catch {}
+    // A member who still owes a forced password reset is bounced to the reset
+    // screen for any protected call.
+    if (res.status === 403 && errBody.code === 'PASSWORD_CHANGE_REQUIRED'
+        && window.location.pathname !== '/change-password') {
+      window.location.href = '/change-password'
+    }
     throw errBody
   }
 

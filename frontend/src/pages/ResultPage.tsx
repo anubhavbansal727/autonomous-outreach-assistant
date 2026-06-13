@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { PERMISSIONS } from '@/lib/permissions'
 import type { OutreachJob } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,6 +61,7 @@ export function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { user, can } = useAuth()
   const [editMode, setEditMode] = useState(false)
   const [editValues, setEditValues] = useState({ email_subject: '', email_draft: '', linkedin_draft: '' })
 
@@ -90,6 +93,11 @@ export function ResultPage() {
 
   const alreadySent = job.send_status === 'sent'
   const schedule = job.schedule_json
+  // Edit/send/retry are owner-only (an admin viewing via outreach.view.all sees
+  // a read-only copy). The server enforces this too — this just hides dead buttons.
+  const isOwner = job.user_id === user?.id
+  const canEdit = isOwner && can(PERMISSIONS.OUTREACH_CREATE)
+  const canSend = isOwner && can(PERMISSIONS.OUTREACH_SEND)
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -108,9 +116,11 @@ export function ResultPage() {
         <div className="flex flex-wrap items-start gap-2 p-4 rounded-md bg-destructive/10 text-destructive text-sm">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1 basis-48"><p className="font-medium">Job failed</p><p className="break-words">{job.error_message}</p></div>
-          <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
-            <RefreshCw className="h-3 w-3 mr-1" />Retry
-          </Button>
+          {canEdit && (
+            <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
+              <RefreshCw className="h-3 w-3 mr-1" />Retry
+            </Button>
+          )}
         </div>
       )}
 
@@ -118,7 +128,7 @@ export function ResultPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-base">Email</CardTitle>
-          {!alreadySent && !editMode && <Button size="sm" variant="outline" onClick={enterEdit}><Edit2 className="h-3 w-3 mr-1" />Edit</Button>}
+          {!alreadySent && !editMode && canEdit && <Button size="sm" variant="outline" onClick={enterEdit}><Edit2 className="h-3 w-3 mr-1" />Edit</Button>}
           {alreadySent && <Badge variant="success">Sent</Badge>}
         </CardHeader>
         <CardContent className="space-y-4">
@@ -135,7 +145,9 @@ export function ResultPage() {
             <>
               <div><p className="text-xs text-muted-foreground mb-1">Subject</p><p className="font-medium">{job.email_subject ?? '—'}</p></div>
               <div><p className="text-xs text-muted-foreground mb-1">Body</p><pre className="whitespace-pre-wrap break-words text-sm font-sans leading-relaxed">{job.email_draft ?? '—'}</pre></div>
-              <SendDialog jobId={job.id} disabled={alreadySent || job.status !== 'done'} />
+              {canSend
+                ? <SendDialog jobId={job.id} disabled={alreadySent || job.status !== 'done'} />
+                : !isOwner && <p className="text-xs text-muted-foreground">Read-only — this outreach belongs to another member.</p>}
             </>
           )}
         </CardContent>

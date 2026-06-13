@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import type { User } from '@/types'
+import type { MeResponse, User } from '@/types'
+import { can as canPermission, type Permission } from '@/lib/permissions'
 
 interface AuthState {
   user: User | null
@@ -7,9 +8,14 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (token: string, user: User) => void
+  /** Set the token, fetch /me, and populate the user. Returns the loaded user. */
+  login: (token: string) => Promise<User>
   logout: () => void
   setToken: (token: string) => void
+  /** Re-fetch /me (e.g. after changing password or role). */
+  refreshMe: () => Promise<User | null>
+  /** UI-only permission check (server is authoritative). */
+  can: (permission: Permission) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -18,6 +24,25 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 let _currentToken: string | null = null
 export const getStoredToken = () => _currentToken
 export const setStoredToken = (t: string | null) => { _currentToken = t }
+
+function mapMe(me: MeResponse): User {
+  return {
+    id: me.user_id,
+    email: me.email,
+    resend_domain: me.resend_domain,
+    created_at: me.created_at,
+    role: me.role,
+    permissions: me.permissions ?? [],
+    must_change_password: me.must_change_password ?? false,
+    tenant: me.tenant ?? null,
+  }
+}
+
+async function fetchMe(token: string): Promise<User | null> {
+  const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return null
+  return mapMe((await res.json()) as MeResponse)
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, accessToken: null })
@@ -30,23 +55,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = await res.json()
           setStoredToken(data.access_token)
-          // Fetch /me to get user info
-          const meRes = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${data.access_token}` },
-          })
-          if (meRes.ok) {
-            const user = await meRes.json()
-            setState({ accessToken: data.access_token, user: { id: user.user_id, email: user.email, resend_domain: user.resend_domain, created_at: user.created_at } })
-          }
+          const user = await fetchMe(data.access_token)
+          if (user) setState({ accessToken: data.access_token, user })
         }
       })
       .catch(() => {})
       .finally(() => setInitializing(false))
   }, [])
 
-  const login = useCallback((token: string, user: User) => {
+  const login = useCallback(async (token: string): Promise<User> => {
     setStoredToken(token)
+    const user = await fetchMe(token)
+    if (!user) throw new Error('Failed to load profile')
     setState({ accessToken: token, user })
+    return user
   }, [])
 
   const logout = useCallback(() => {
@@ -60,10 +82,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, accessToken: token }))
   }, [])
 
+  const refreshMe = useCallback(async (): Promise<User | null> => {
+    const token = getStoredToken()
+    if (!token) return null
+    const user = await fetchMe(token)
+    if (user) setState(prev => ({ ...prev, user }))
+    return user
+  }, [])
+
+  const can = useCallback(
+    (permission: Permission) => canPermission(state.user?.permissions, permission),
+    [state.user],
+  )
+
   if (initializing) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, setToken }}>
+    <AuthContext.Provider value={{ ...state, login, logout, setToken, refreshMe, can }}>
       {children}
     </AuthContext.Provider>
   )

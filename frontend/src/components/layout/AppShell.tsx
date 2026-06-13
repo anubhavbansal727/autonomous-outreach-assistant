@@ -3,8 +3,10 @@ import { Sidebar } from './Sidebar'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function AppShell() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   if (!accessToken) return <Navigate to="/login" replace />
+  // Admin-created members must set their own password before using the app.
+  if (user?.must_change_password) return <Navigate to="/change-password" replace />
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

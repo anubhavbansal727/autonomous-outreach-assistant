@@ -41,7 +41,6 @@ from app.models.schemas import (
     RegisterRequest,
     TenantInfo,
     TokenResponse,
-    UpdateMeRequest,
 )
 
 
@@ -228,9 +227,9 @@ async def change_password(
     return ChangePasswordResponse()
 
 
-# resend_domain moved from users to tenants in v3 — it is shared sending
-# config for the whole workspace. These endpoints keep their response shape
-# but now read/write the tenant's value.
+# resend_domain moved from users to tenants in v3 — it is shared sending config.
+# Editing it is owner-only and lives on PATCH /tenant (tenant.manage); /me only
+# mirrors the tenant's value for read convenience.
 
 
 def _me_response(current_user: User) -> MeResponse:
@@ -250,16 +249,4 @@ def _me_response(current_user: User) -> MeResponse:
 
 @router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
 async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
-    return _me_response(current_user)
-
-
-@router.patch("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
-async def update_me(
-    body: UpdateMeRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> MeResponse:
-    if body.resend_domain is not None and current_user.tenant is not None:
-        current_user.tenant.resend_domain = body.resend_domain or None
-    await db.commit()
     return _me_response(current_user)

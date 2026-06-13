@@ -288,41 +288,8 @@ class TestMe:
         assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
-# PATCH /auth/me
-# ---------------------------------------------------------------------------
-
-
-class TestUpdateMe:
-    async def test_patch_me_sets_resend_domain(self, authed_client, fake_tenant, mock_db):
-        # resend_domain lives on the tenant (shared sending config) in v3.
-        resp = await authed_client.patch(
-            "/auth/me",
-            json={"resend_domain": "mycompany.com"},
-        )
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["resend_domain"] == "mycompany.com"
-        assert fake_tenant.resend_domain == "mycompany.com"
-        mock_db.commit.assert_awaited_once()
-
-    async def test_patch_me_clears_resend_domain(self, authed_client, fake_tenant, mock_db):
-        # Empty string → router sets the tenant's resend_domain = None
-        fake_tenant.resend_domain = "old.com"
-
-        resp = await authed_client.patch(
-            "/auth/me",
-            json={"resend_domain": ""},
-        )
-
-        assert resp.status_code == 200
-        assert resp.json()["resend_domain"] is None
-        assert fake_tenant.resend_domain is None
-
-    async def test_patch_me_without_auth_returns_403(self, anon_client):
-        resp = await anon_client.patch("/auth/me", json={"resend_domain": "x.com"})
-        assert resp.status_code == 403
+# resend_domain editing moved to PATCH /tenant (owner-only) in v3 — see
+# test_tenant.py. /auth/me is read-only now.
 
 
 # ---------------------------------------------------------------------------

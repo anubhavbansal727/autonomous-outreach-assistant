@@ -78,10 +78,6 @@ class LogoutResponse(BaseModel):
     logged_out: bool = True
 
 
-class UpdateMeRequest(BaseModel):
-    resend_domain: str | None = Field(default=None, max_length=253)
-
-
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8)
@@ -279,6 +275,8 @@ class OutreachStatusResponse(BaseModel):
 
 class OutreachResultResponse(BaseModel):
     id: uuid.UUID
+    # The member who owns this outreach — the UI gates edit/send on ownership.
+    user_id: uuid.UUID
     company_name: str
     contact_name: str | None
     status: str

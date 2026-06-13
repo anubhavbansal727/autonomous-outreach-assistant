@@ -103,6 +103,7 @@ def make_outreach_job(
     """Return a MagicMock that looks like an OutreachJob ORM row."""
     j = MagicMock()
     j.id = job_id or JOB_ID
+    j.user_id = USER_ID
     j.company_name = company_name
     j.contact_name = contact_name
     j.status = status

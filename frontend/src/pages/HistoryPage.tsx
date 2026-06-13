@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { PERMISSIONS } from '@/lib/permissions'
 import type { HistoryItem } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 
 function StatusBadge({ status }: { status: string }) {
@@ -20,20 +23,38 @@ function SendBadge({ status }: { status: string }) {
 
 export function HistoryPage() {
   const navigate = useNavigate()
+  const { can } = useAuth()
+  const canViewAll = can(PERMISSIONS.OUTREACH_VIEW_ALL)
   const [page, setPage] = useState(1)
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const perPage = 20
 
   const { data, isLoading } = useQuery<{ items: HistoryItem[]; total: number; page: number; per_page: number }>({
-    queryKey: ['outreach', 'history', page],
-    queryFn: () => apiFetch(`/outreach/history?page=${page}&per_page=${perPage}`),
+    queryKey: ['outreach', 'history', page, scope],
+    queryFn: () => apiFetch(`/outreach/history?page=${page}&per_page=${perPage}&scope=${scope}`),
     staleTime: 60_000,
   })
 
   const totalPages = data ? Math.ceil(data.total / perPage) : 1
 
+  const setScopeReset = (s: 'mine' | 'all') => { setScope(s); setPage(1) }
+
   return (
     <div className="max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold">History</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold">History</h1>
+        {canViewAll && (
+          <div className="inline-flex rounded-md border p-0.5 text-sm">
+            {(['mine', 'all'] as const).map(s => (
+              <button key={s} onClick={() => setScopeReset(s)}
+                className={cn('px-3 py-1 rounded capitalize transition-colors',
+                  scope === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                {s === 'mine' ? 'My outreach' : 'All members'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
