@@ -176,6 +176,26 @@ async def require_context(
     )
 
 
+async def require_password_changed(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Block access while the user still owes a forced password reset.
+
+    Applied to all protected routers EXCEPT /auth, so a member created with a
+    temporary password can still hit /auth/me, /auth/change-password and
+    /auth/logout, but nothing else, until they set their own password.
+    """
+    if current_user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "You must change your password before continuing",
+                "code": "PASSWORD_CHANGE_REQUIRED",
+            },
+        )
+    return current_user
+
+
 def require_permission(permission: Permission | str):
     """Build a dependency that 403s unless the caller's role grants ``permission``.
 

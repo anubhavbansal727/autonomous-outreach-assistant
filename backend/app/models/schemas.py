@@ -14,7 +14,7 @@ In plain English:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -80,6 +80,101 @@ class LogoutResponse(BaseModel):
 
 class UpdateMeRequest(BaseModel):
     resend_domain: str | None = Field(default=None, max_length=253)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class ChangePasswordResponse(BaseModel):
+    changed: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Tenant (workspace settings)
+# ---------------------------------------------------------------------------
+
+
+class TenantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    resend_domain: str | None
+    created_at: datetime
+
+
+class UpdateTenantRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    resend_domain: str | None = Field(default=None, max_length=253)
+
+
+# ---------------------------------------------------------------------------
+# Members (RBAC team management)
+# ---------------------------------------------------------------------------
+
+# Roles an admin may assign. "owner" is intentionally excluded — ownership is
+# granted only via PATCH by an existing owner, never at member-creation time.
+AssignableRole = Literal["admin", "member", "viewer"]
+
+
+class MemberResponse(BaseModel):
+    user_id: uuid.UUID
+    membership_id: uuid.UUID
+    email: str
+    role: str
+    status: str
+    created_at: datetime
+
+
+class MemberListResponse(BaseModel):
+    members: list[MemberResponse]
+
+
+class CreateMemberRequest(BaseModel):
+    email: EmailStr
+    role: AssignableRole
+
+
+class CreateMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    membership_id: uuid.UUID
+    email: str
+    role: str
+    # The system-generated one-time password, shown to the admin exactly once
+    # so they can relay it. The new member must change it on first login.
+    temporary_password: str
+
+
+class UpdateMemberRequest(BaseModel):
+    role: Literal["owner", "admin", "member", "viewer"] | None = None
+    status: Literal["active", "suspended"] | None = None
+
+
+class RemoveMemberResponse(BaseModel):
+    removed: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+
+class AuditLogEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    action: str
+    target: str | None
+    actor_user_id: uuid.UUID | None
+    # Maps to AuditLog.meta (the DB column is named "metadata").
+    meta: dict | None = None
+    created_at: datetime
+
+
+class AuditLogResponse(BaseModel):
+    items: list[AuditLogEntry]
 
 
 # ---------------------------------------------------------------------------

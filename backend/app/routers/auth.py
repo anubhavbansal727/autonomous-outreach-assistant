@@ -32,6 +32,8 @@ from app.config import settings
 from app.db.session import bind_tenant_context, get_db
 from app.models.db import Membership, Tenant, User
 from app.models.schemas import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     LogoutResponse,
     MeResponse,
@@ -193,6 +195,37 @@ async def refresh(
 async def logout(response: Response) -> LogoutResponse:
     response.delete_cookie(REFRESH_COOKIE)
     return LogoutResponse()
+
+
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChangePasswordResponse:
+    """Set a new password. Clears the forced-reset flag for admin-created members.
+
+    Deliberately NOT behind require_password_changed, so a member who still owes
+    a reset can call it.
+    """
+    if not bcrypt.checkpw(
+        body.current_password.encode(), current_user.password_hash.encode()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "Current password is incorrect", "code": "INVALID_CREDENTIALS"},
+        )
+
+    current_user.password_hash = bcrypt.hashpw(
+        body.new_password.encode(), bcrypt.gensalt()
+    ).decode()
+    current_user.must_change_password = False
+    await db.commit()
+    return ChangePasswordResponse()
 
 
 # resend_domain moved from users to tenants in v3 — it is shared sending

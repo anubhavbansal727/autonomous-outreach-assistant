@@ -323,3 +323,61 @@ class TestUpdateMe:
     async def test_patch_me_without_auth_returns_403(self, anon_client):
         resp = await anon_client.patch("/auth/me", json={"resend_domain": "x.com"})
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/change-password
+# ---------------------------------------------------------------------------
+
+
+class TestChangePassword:
+    async def test_change_password_clears_flag(self, authed_client, fake_user, mock_db):
+        fake_user.must_change_password = True
+        with patch("app.routers.auth.bcrypt") as mock_bcrypt:
+            mock_bcrypt.checkpw.return_value = True
+            mock_bcrypt.hashpw.return_value = b"newhash"
+            mock_bcrypt.gensalt.return_value = b"salt"
+            resp = await authed_client.post(
+                "/auth/change-password",
+                json={"current_password": "temp1234", "new_password": "brandnew123"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["changed"] is True
+        assert fake_user.must_change_password is False
+        mock_db.commit.assert_awaited_once()
+
+    async def test_change_password_wrong_current_401(self, authed_client, fake_user):
+        with patch("app.routers.auth.bcrypt") as mock_bcrypt:
+            mock_bcrypt.checkpw.return_value = False
+            resp = await authed_client.post(
+                "/auth/change-password",
+                json={"current_password": "wrong", "new_password": "brandnew123"},
+            )
+        assert resp.status_code == 401
+
+    async def test_change_password_short_new_422(self, authed_client):
+        resp = await authed_client.post(
+            "/auth/change-password",
+            json={"current_password": "temp1234", "new_password": "short"},
+        )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Forced-reset guard (require_password_changed)
+# ---------------------------------------------------------------------------
+
+
+class TestForcedResetGuard:
+    async def test_protected_route_blocked_until_reset(self, authed_client, fake_user):
+        fake_user.must_change_password = True
+        resp = await authed_client.get("/profile")
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+    async def test_auth_me_still_reachable_during_forced_reset(self, authed_client, fake_user):
+        # /auth is exempt from the guard so the user can still see who they are.
+        fake_user.must_change_password = True
+        resp = await authed_client.get("/auth/me")
+        assert resp.status_code == 200
+        assert resp.json()["must_change_password"] is True
