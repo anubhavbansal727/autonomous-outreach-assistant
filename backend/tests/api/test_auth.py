@@ -17,22 +17,41 @@ import pytest
 
 from app.auth.dependencies import create_refresh_token
 
-from .conftest import CREATED_AT, USER_ID, make_result
+from .conftest import CREATED_AT, TENANT_ID, USER_ID, make_result
 
 
 def _db_user(
     user_id=None,
     email="test@example.com",
-    resend_domain=None,
+    must_change_password=False,
 ):
     """Build a MagicMock representing a User row fetched from the DB."""
     u = MagicMock()
     u.id = user_id or USER_ID
     u.email = email
     u.password_hash = "fake_bcrypt_hash"  # bcrypt.checkpw is always patched
-    u.resend_domain = resend_domain
+    u.must_change_password = must_change_password
     u.created_at = CREATED_AT
     return u
+
+
+def _db_membership(role="owner", status="active"):
+    """Build a MagicMock representing the user's Membership row."""
+    m = MagicMock()
+    m.tenant_id = TENANT_ID
+    m.user_id = USER_ID
+    m.role = role
+    m.status = status
+    return m
+
+
+def _login_results(user, membership=None):
+    """Execute side-effects for a login/refresh: user lookup, GUC bind, membership."""
+    return [
+        make_result(scalar=user),         # user lookup by email / id
+        make_result(),                    # bind_tenant_context(user_id) — ignored
+        make_result(scalar=membership),   # membership lookup
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +128,7 @@ class TestRegister:
 
 class TestLogin:
     async def test_login_valid_credentials_returns_200(self, anon_client, mock_db):
-        mock_db.execute.return_value = make_result(scalar=_db_user())
+        mock_db.execute.side_effect = _login_results(_db_user(), _db_membership())
 
         with patch("app.routers.auth.bcrypt") as mock_bcrypt:
             mock_bcrypt.checkpw.return_value = True  # password matches
@@ -123,9 +142,29 @@ class TestLogin:
         body = resp.json()
         assert "access_token" in body
         assert body["token_type"] == "bearer"
+        assert body["role"] == "owner"
+        assert body["tenant_id"] == str(TENANT_ID)
+        assert body["must_change_password"] is False
+
+    async def test_login_surfaces_must_change_password(self, anon_client, mock_db):
+        mock_db.execute.side_effect = _login_results(
+            _db_user(must_change_password=True), _db_membership(role="member")
+        )
+
+        with patch("app.routers.auth.bcrypt") as mock_bcrypt:
+            mock_bcrypt.checkpw.return_value = True
+
+            resp = await anon_client.post(
+                "/auth/login",
+                json={"email": "test@example.com", "password": "temp"},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["must_change_password"] is True
+        assert resp.json()["role"] == "member"
 
     async def test_login_sets_refresh_cookie(self, anon_client, mock_db):
-        mock_db.execute.return_value = make_result(scalar=_db_user())
+        mock_db.execute.side_effect = _login_results(_db_user(), _db_membership())
 
         with patch("app.routers.auth.bcrypt") as mock_bcrypt:
             mock_bcrypt.checkpw.return_value = True
@@ -175,7 +214,7 @@ class TestLogin:
 class TestRefresh:
     async def test_refresh_with_valid_cookie_returns_200(self, anon_client, mock_db):
         refresh_token = create_refresh_token(str(USER_ID))
-        mock_db.execute.return_value = make_result(scalar=_db_user())
+        mock_db.execute.side_effect = _login_results(_db_user(), _db_membership())
 
         resp = await anon_client.post(
             "/auth/refresh",
@@ -230,6 +269,18 @@ class TestMe:
         assert body["email"] == fake_user.email
         assert body["user_id"] == str(fake_user.id)
         assert body["resend_domain"] is None
+
+    async def test_me_returns_role_and_permissions(self, authed_client, fake_user):
+        # fake_user is an owner (see conftest) → full permission set.
+        resp = await authed_client.get("/auth/me")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["role"] == "owner"
+        assert "tenant.manage" in body["permissions"]
+        assert "outreach.send" in body["permissions"]
+        assert body["tenant"]["id"] == str(fake_user.tenant.id)
+        assert body["must_change_password"] is False
 
     async def test_me_without_auth_returns_403(self, anon_client):
         # No Authorization header → HTTPBearer returns 403

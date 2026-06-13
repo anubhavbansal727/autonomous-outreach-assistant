@@ -27,6 +27,7 @@ from app.auth.dependencies import (
     create_refresh_token,
     get_current_user,
 )
+from app.auth.permissions import permissions_for
 from app.config import settings
 from app.db.session import bind_tenant_context, get_db
 from app.models.db import Membership, Tenant, User
@@ -36,9 +37,17 @@ from app.models.schemas import (
     MeResponse,
     RefreshResponse,
     RegisterRequest,
+    TenantInfo,
     TokenResponse,
     UpdateMeRequest,
 )
+
+
+async def _resolve_membership(db: AsyncSession, user_id) -> Membership | None:
+    """Load a user's membership, binding the user GUC so RLS allows the read."""
+    await bind_tenant_context(db, user_id=str(user_id))
+    result = await db.execute(select(Membership).where(Membership.user_id == user_id))
+    return result.scalar_one_or_none()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -85,11 +94,21 @@ async def register(
     await db.refresh(user)
     await db.commit()
 
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    access_token = create_access_token(
+        str(user.id), tenant_id=str(tenant_id), role="owner"
+    )
+    refresh_token = create_refresh_token(
+        str(user.id), tenant_id=str(tenant_id), role="owner"
+    )
 
     response.set_cookie(REFRESH_COOKIE, refresh_token, **COOKIE_OPTS)
-    return TokenResponse(access_token=access_token, user_id=str(user.id))
+    return TokenResponse(
+        access_token=access_token,
+        user_id=str(user.id),
+        tenant_id=str(tenant_id),
+        role="owner",
+        must_change_password=False,
+    )
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
@@ -107,11 +126,21 @@ async def login(
             detail={"error": "Invalid email or password", "code": "INVALID_CREDENTIALS"},
         )
 
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    membership = await _resolve_membership(db, user.id)
+    tenant_id = str(membership.tenant_id) if membership else None
+    role = membership.role if membership else None
+
+    access_token = create_access_token(str(user.id), tenant_id=tenant_id, role=role)
+    refresh_token = create_refresh_token(str(user.id), tenant_id=tenant_id, role=role)
 
     response.set_cookie(REFRESH_COOKIE, refresh_token, **COOKIE_OPTS)
-    return TokenResponse(access_token=access_token, user_id=str(user.id))
+    return TokenResponse(
+        access_token=access_token,
+        user_id=str(user.id),
+        tenant_id=tenant_id,
+        role=role,
+        must_change_password=user.must_change_password,
+    )
 
 
 @router.post("/refresh", response_model=RefreshResponse, status_code=status.HTTP_200_OK)
@@ -151,7 +180,13 @@ async def refresh(
             detail={"error": "User not found", "code": "USER_NOT_FOUND"},
         )
 
-    return RefreshResponse(access_token=create_access_token(str(user.id)))
+    membership = await _resolve_membership(db, user.id)
+    tenant_id = str(membership.tenant_id) if membership else None
+    role = membership.role if membership else None
+
+    return RefreshResponse(
+        access_token=create_access_token(str(user.id), tenant_id=tenant_id, role=role)
+    )
 
 
 @router.post("/logout", response_model=LogoutResponse, status_code=status.HTTP_200_OK)
@@ -165,14 +200,24 @@ async def logout(response: Response) -> LogoutResponse:
 # but now read/write the tenant's value.
 
 
-@router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
-async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
+def _me_response(current_user: User) -> MeResponse:
+    """Build the /me payload from the tenant-enriched User (see get_current_user)."""
+    tenant = current_user.tenant
     return MeResponse(
         user_id=current_user.id,
         email=current_user.email,
-        resend_domain=current_user.tenant.resend_domain if current_user.tenant else None,
+        resend_domain=tenant.resend_domain if tenant else None,
         created_at=current_user.created_at,
+        must_change_password=current_user.must_change_password,
+        role=current_user.role,
+        permissions=permissions_for(current_user.role),
+        tenant=TenantInfo.model_validate(tenant) if tenant else None,
     )
+
+
+@router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
+async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
+    return _me_response(current_user)
 
 
 @router.patch("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
@@ -184,9 +229,4 @@ async def update_me(
     if body.resend_domain is not None and current_user.tenant is not None:
         current_user.tenant.resend_domain = body.resend_domain or None
     await db.commit()
-    return MeResponse(
-        user_id=current_user.id,
-        email=current_user.email,
-        resend_domain=current_user.tenant.resend_domain if current_user.tenant else None,
-        created_at=current_user.created_at,
-    )
+    return _me_response(current_user)

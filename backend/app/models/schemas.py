@@ -39,6 +39,10 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user_id: str
+    # v3: tenant context surfaced so the client can route immediately after auth.
+    tenant_id: str | None = None
+    role: str | None = None
+    must_change_password: bool = False
 
 
 class RefreshResponse(BaseModel):
@@ -46,13 +50,28 @@ class RefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class TenantInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    resend_domain: str | None
+
+
 class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
     email: str
+    # resend_domain is the tenant's value, mirrored here for backward
+    # compatibility with the existing Settings page (until the Phase 6 frontend).
     resend_domain: str | None
     created_at: datetime
+    must_change_password: bool = False
+    # v3 RBAC context
+    role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+    tenant: TenantInfo | None = None
 
 
 class LogoutResponse(BaseModel):
