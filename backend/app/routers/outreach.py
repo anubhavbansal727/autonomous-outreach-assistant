@@ -26,15 +26,17 @@ import io
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import RequestContext, require_permission
+from app.auth.permissions import Permission
 from app.db.session import get_db
-from app.models.db import BatchJob, OutreachJob, ProductProfile, User
+from app.models.db import BatchJob, OutreachJob, ProductProfile
 from app.models.schemas import (
     BatchCreateResponse,
     BatchProspectStatus,
@@ -77,9 +79,21 @@ async def _get_active_profile(db: AsyncSession, tenant_id: uuid.UUID) -> Product
     return profile
 
 
-async def _get_job(
+def _can_view_all(ctx: RequestContext) -> bool:
+    """True if the caller may see other members' outreach (admin oversight)."""
+    return Permission.OUTREACH_VIEW_ALL.value in ctx.permissions
+
+
+_JOB_NOT_FOUND = HTTPException(
+    status_code=status.HTTP_404_NOT_FOUND,
+    detail={"error": "Outreach job not found", "code": "JOB_NOT_FOUND"},
+)
+
+
+async def _get_owned_job(
     db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID
 ) -> OutreachJob:
+    """Fetch a job the caller OWNS. For mutations (edit/send/retry/delete)."""
     result = await db.execute(
         select(OutreachJob).where(
             OutreachJob.id == job_id,
@@ -88,10 +102,21 @@ async def _get_job(
     )
     job = result.scalar_one_or_none()
     if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "Outreach job not found", "code": "JOB_NOT_FOUND"},
-        )
+        raise _JOB_NOT_FOUND
+    return job
+
+
+async def _get_viewable_job(
+    db: AsyncSession, job_id: uuid.UUID, ctx: RequestContext
+) -> OutreachJob:
+    """Fetch a job the caller may VIEW: their own, or — with outreach.view.all —
+    any job in the tenant (RLS already restricts the query to the tenant)."""
+    stmt = select(OutreachJob).where(OutreachJob.id == job_id)
+    if not _can_view_all(ctx):
+        stmt = stmt.where(OutreachJob.user_id == ctx.user.id)
+    job = (await db.execute(stmt)).scalar_one_or_none()
+    if job is None:
+        raise _JOB_NOT_FOUND
     return job
 
 
@@ -165,14 +190,14 @@ def _parse_prospects_csv(raw: bytes) -> list[GenerateRequest]:
 )
 async def generate(
     body: GenerateRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateResponse:
     pool = await get_arq_pool()
 
     allowed, retry_after = await check_rate_limit(
         pool,
-        f"outreach:{current_user.id}",
+        f"outreach:{ctx.user.id}",
         limit=10,
         window=3600,
     )
@@ -185,11 +210,11 @@ async def generate(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.tenant_id)
+    profile = await _get_active_profile(db, ctx.tenant_id)
 
     job = OutreachJob(
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user.id,
         company_name=body.company_name,
         contact_name=body.contact_name,
         status="running",
@@ -203,7 +228,7 @@ async def generate(
     await pool.enqueue_job(
         "run_outreach_job",
         job_id=str(job.id),
-        user_id=str(current_user.id),
+        user_id=str(ctx.user.id),
         company_name=body.company_name,
         contact_name=body.contact_name,
         product_profile=_profile_to_dict(profile),
@@ -217,7 +242,7 @@ async def generate(
 )
 async def create_batch(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> BatchCreateResponse:
     """Upload a CSV of up to 20 prospects and kick off a batch outreach run."""
@@ -228,7 +253,7 @@ async def create_batch(
     # Batches get their own quota, independent of the single-generate limit.
     allowed, retry_after = await check_rate_limit(
         pool,
-        f"batch:{current_user.id}",
+        f"batch:{ctx.user.id}",
         limit=2,
         window=3600,
     )
@@ -241,14 +266,14 @@ async def create_batch(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.tenant_id)
+    profile = await _get_active_profile(db, ctx.tenant_id)
 
     batch_id = uuid.uuid4()
     db.add(
         BatchJob(
             id=batch_id,
-            tenant_id=current_user.tenant_id,
-            user_id=current_user.id,
+            tenant_id=ctx.tenant_id,
+            user_id=ctx.user.id,
             product_profile_id=profile.id,
             status="running",
             total=len(prospects),
@@ -261,8 +286,8 @@ async def create_batch(
         db.add(
             OutreachJob(
                 id=job_id,
-                tenant_id=current_user.tenant_id,
-                user_id=current_user.id,
+                tenant_id=ctx.tenant_id,
+                user_id=ctx.user.id,
                 product_profile_id=profile.id,
                 batch_id=batch_id,
                 batch_index=idx,
@@ -288,7 +313,7 @@ async def create_batch(
     await pool.enqueue_job(
         "run_batch_job",
         batch_id=str(batch_id),
-        user_id=str(current_user.id),
+        user_id=str(ctx.user.id),
         prospects=payload,
         product_profile=_profile_to_dict(profile),
     )
@@ -303,15 +328,13 @@ async def create_batch(
 )
 async def get_batch_status(
     batch_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_VIEW_OWN)),
     db: AsyncSession = Depends(get_db),
 ) -> BatchStatusResponse:
-    result = await db.execute(
-        select(BatchJob).where(
-            BatchJob.id == batch_id,
-            BatchJob.user_id == current_user.id,
-        )
-    )
+    stmt = select(BatchJob).where(BatchJob.id == batch_id)
+    if not _can_view_all(ctx):
+        stmt = stmt.where(BatchJob.user_id == ctx.user.id)
+    result = await db.execute(stmt)
     batch = result.scalar_one_or_none()
     if batch is None:
         raise HTTPException(
@@ -356,10 +379,10 @@ async def get_batch_status(
 )
 async def get_status(
     job_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_VIEW_OWN)),
     db: AsyncSession = Depends(get_db),
 ) -> OutreachStatusResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    job = await _get_viewable_job(db, job_id, ctx)
     return OutreachStatusResponse(
         job_id=job.id,
         status=job.status,
@@ -375,10 +398,10 @@ async def get_status(
 )
 async def get_result(
     job_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_VIEW_OWN)),
     db: AsyncSession = Depends(get_db),
 ) -> OutreachResultResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    job = await _get_viewable_job(db, job_id, ctx)
 
     if job.status == "running":
         raise HTTPException(
@@ -412,10 +435,11 @@ async def get_result(
 async def edit_draft(
     job_id: uuid.UUID,
     body: EditDraftRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> EditDraftResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    # Editing is owner-only — oversight (view.all) is read-only.
+    job = await _get_owned_job(db, job_id, ctx.user.id)
 
     if job.send_status == "sent":
         raise HTTPException(
@@ -444,10 +468,11 @@ async def edit_draft(
 async def send(
     job_id: uuid.UUID,
     body: SendRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_SEND)),
     db: AsyncSession = Depends(get_db),
 ) -> SendResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    # Sending is owner-only — you can only send your own drafts.
+    job = await _get_owned_job(db, job_id, ctx.user.id)
 
     if job.send_status == "sent":
         raise HTTPException(
@@ -458,7 +483,7 @@ async def send(
     # Load the tenant's active profile to get product_name
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.tenant_id == current_user.tenant_id,
+            ProductProfile.tenant_id == ctx.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
@@ -466,7 +491,7 @@ async def send(
 
     # Fall back to resend.dev (Resend test domain) when the tenant hasn't
     # configured a verified sending domain yet.
-    tenant_domain = current_user.tenant.resend_domain if current_user.tenant else None
+    tenant_domain = ctx.user.tenant.resend_domain if ctx.user.tenant else None
     resend_domain = tenant_domain or "resend.dev"
 
     product_name = profile.product_name if profile else "Our Product"
@@ -502,10 +527,10 @@ async def send(
 )
 async def retry(
     job_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> RetryResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    job = await _get_owned_job(db, job_id, ctx.user.id)
 
     if job.status != "failed":
         raise HTTPException(
@@ -517,7 +542,7 @@ async def retry(
 
     allowed, retry_after = await check_rate_limit(
         pool,
-        f"outreach:{current_user.id}",
+        f"outreach:{ctx.user.id}",
         limit=10,
         window=3600,
     )
@@ -530,7 +555,7 @@ async def retry(
             },
         )
 
-    profile = await _get_active_profile(db, current_user.tenant_id)
+    profile = await _get_active_profile(db, ctx.tenant_id)
 
     job.status = "running"
     job.current_step = None
@@ -541,7 +566,7 @@ async def retry(
     await pool.enqueue_job(
         "run_outreach_job",
         job_id=str(job.id),
-        user_id=str(current_user.id),
+        user_id=str(ctx.user.id),
         company_name=job.company_name,
         contact_name=job.contact_name,
         product_profile=_profile_to_dict(profile),
@@ -558,21 +583,37 @@ async def retry(
 async def history(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, le=100),
-    current_user: User = Depends(get_current_user),
+    scope: Literal["mine", "all"] = Query("mine"),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_VIEW_OWN)),
     db: AsyncSession = Depends(get_db),
 ) -> HistoryResponse:
+    # scope=all surfaces every member's outreach in the tenant — admin oversight,
+    # so it needs outreach.view.all. scope=mine (default) is the caller's own.
+    if scope == "all":
+        if not _can_view_all(ctx):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "You do not have permission to view all outreach",
+                    "code": "PERMISSION_DENIED",
+                    "required_permission": Permission.OUTREACH_VIEW_ALL.value,
+                },
+            )
+        # No user filter — RLS already restricts the query to the tenant.
+        scope_filter = []
+    else:
+        scope_filter = [OutreachJob.user_id == ctx.user.id]
+
     offset = (page - 1) * per_page
 
     count_result = await db.execute(
-        select(func.count()).select_from(OutreachJob).where(
-            OutreachJob.user_id == current_user.id
-        )
+        select(func.count()).select_from(OutreachJob).where(*scope_filter)
     )
     total: int = count_result.scalar_one()
 
     items_result = await db.execute(
         select(OutreachJob)
-        .where(OutreachJob.user_id == current_user.id)
+        .where(*scope_filter)
         .order_by(OutreachJob.created_at.desc())
         .offset(offset)
         .limit(per_page)
@@ -594,10 +635,11 @@ async def history(
 )
 async def delete_job(
     job_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.OUTREACH_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> DeleteJobResponse:
-    job = await _get_job(db, job_id, current_user.id)
+    # Deleting is owner-only — you can only delete your own outreach.
+    job = await _get_owned_job(db, job_id, ctx.user.id)
     await db.delete(job)
     await db.commit()
     return DeleteJobResponse()

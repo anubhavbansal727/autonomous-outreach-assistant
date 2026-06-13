@@ -19,9 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import RequestContext, require_permission
+from app.auth.permissions import Permission
 from app.db.session import get_db
-from app.models.db import IngestionJob, ProductProfile, User
+from app.models.db import IngestionJob, ProductProfile
 from app.models.schemas import (
     IngestRequest,
     IngestResponse,
@@ -40,12 +41,12 @@ router = APIRouter(prefix="/profile", tags=["profile"])
 
 @router.get("", response_model=ProfileResponse, status_code=status.HTTP_200_OK)
 async def get_profile(
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.PROFILE_VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> ProfileResponse:
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.tenant_id == current_user.tenant_id,
+            ProductProfile.tenant_id == ctx.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
@@ -74,7 +75,7 @@ async def get_profile(
 @router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)
 async def ingest(
     body: IngestRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.PROFILE_EDIT)),
     db: AsyncSession = Depends(get_db),
 ) -> IngestResponse:
     pool = await get_arq_pool()
@@ -82,7 +83,7 @@ async def ingest(
     # Rate limit: 10 ingest requests per hour per user
     allowed, retry_after = await check_rate_limit(
         pool,  # arq pool is itself an async Redis client
-        f"ingest:{current_user.id}",
+        f"ingest:{ctx.user.id}",
         limit=10,
         window=3600,
     )
@@ -96,8 +97,8 @@ async def ingest(
         )
 
     job = IngestionJob(
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user.id,
         url=body.url,
         status="running",
     )
@@ -109,7 +110,7 @@ async def ingest(
     await pool.enqueue_job(
         "run_ingestion_job",
         job_id=str(job.id),
-        user_id=str(current_user.id),
+        user_id=str(ctx.user.id),
         url=body.url,
     )
 
@@ -123,14 +124,14 @@ async def ingest(
 )
 async def get_ingestion_result(
     job_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.PROFILE_VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> IngestionResultResponse:
     # Ingestion jobs are tenant-shared config work, not private per member.
     result = await db.execute(
         select(IngestionJob).where(
             IngestionJob.id == job_id,
-            IngestionJob.tenant_id == current_user.tenant_id,
+            IngestionJob.tenant_id == ctx.tenant_id,
         )
     )
     job = result.scalar_one_or_none()
@@ -152,22 +153,22 @@ async def get_ingestion_result(
 @router.post("/save", response_model=SaveProfileResponse, status_code=status.HTTP_201_CREATED)
 async def save_profile(
     body: SaveProfileRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.PROFILE_EDIT)),
     db: AsyncSession = Depends(get_db),
 ) -> SaveProfileResponse:
     # Deactivate any existing active profile for this tenant
     await db.execute(
         update(ProductProfile)
         .where(
-            ProductProfile.tenant_id == current_user.tenant_id,
+            ProductProfile.tenant_id == ctx.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
         .values(is_active=False)
     )
 
     profile = ProductProfile(
-        tenant_id=current_user.tenant_id,
-        created_by_user_id=current_user.id,
+        tenant_id=ctx.tenant_id,
+        created_by_user_id=ctx.user.id,
         product_name=body.product_name,
         one_liner=body.one_liner,
         target_customer=body.target_customer,
@@ -191,12 +192,12 @@ async def save_profile(
 @router.put("/update", response_model=UpdateProfileResponse, status_code=status.HTTP_200_OK)
 async def update_profile(
     body: UpdateProfileRequest,
-    current_user: User = Depends(get_current_user),
+    ctx: RequestContext = Depends(require_permission(Permission.PROFILE_EDIT)),
     db: AsyncSession = Depends(get_db),
 ) -> UpdateProfileResponse:
     result = await db.execute(
         select(ProductProfile).where(
-            ProductProfile.tenant_id == current_user.tenant_id,
+            ProductProfile.tenant_id == ctx.tenant_id,
             ProductProfile.is_active == True,  # noqa: E712
         )
     )
