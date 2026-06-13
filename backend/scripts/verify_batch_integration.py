@@ -105,7 +105,8 @@ async def test_real_graph():
     try:
         prospects = [{"index": i, "job_id": str(cid), "company_name": f"Company {i}",
                       "contact_name": ""} for i, cid in enumerate(child_ids)]
-        await _run_real_batch(str(batch_id), prospects, {"product_name": "Test Product"})
+        # tenant_id == user_id for rows created by _seed.
+        await _run_real_batch(str(batch_id), str(user_id), prospects, {"product_name": "Test Product"})
         await _assert_done(batch_id, n, "real-graph")
     finally:
         await _cleanup(user_id)
@@ -119,7 +120,7 @@ async def test_mock_path():
         batch_id, child_ids, user_id = await _seed(db, n)
     try:
         prospects = [{"index": i, "job_id": str(cid)} for i, cid in enumerate(child_ids)]
-        await _run_mock_batch(str(batch_id), prospects)
+        await _run_mock_batch(str(batch_id), str(user_id), prospects)
         await _assert_done(batch_id, n, "mock-path")
     finally:
         await _cleanup(user_id)

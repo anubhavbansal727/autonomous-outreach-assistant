@@ -111,6 +111,7 @@ async def ingest(
         "run_ingestion_job",
         job_id=str(job.id),
         user_id=str(ctx.user.id),
+        tenant_id=str(ctx.tenant_id),
         url=body.url,
     )
 

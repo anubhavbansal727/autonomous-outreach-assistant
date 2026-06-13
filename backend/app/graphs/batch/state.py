@@ -28,6 +28,7 @@ class ResearchTask(TypedDict):
     # Shared across all prospects — carried in each Send payload so the
     # research branch can build a full OutreachState without main-graph access.
     batch_id: str
+    tenant_id: str              # RLS context for this branch's DB writes
     product_profile: str        # JSON string of the user's product profile
     avoid_messaging: str
 
@@ -43,6 +44,7 @@ class ResearchResult(TypedDict):
 class BatchState(TypedDict):
     # Input — provided by the caller before graph.astream()
     batch_id: str
+    tenant_id: str              # RLS context for the sequential personalise node
     product_profile: str        # JSON string of the user's product profile
     avoid_messaging: str
     prospects: list[ResearchTask]

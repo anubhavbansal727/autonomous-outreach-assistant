@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from sqlalchemy import update
 
 from app.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import tenant_session
 from app.models.db import OutreachJob
 
 logger = logging.getLogger(__name__)
@@ -43,24 +43,27 @@ async def run_outreach_job(
     *,
     job_id: str,
     user_id: str,
+    tenant_id: str,
     company_name: str,
     contact_name: str | None,
     product_profile: dict,
 ) -> None:
     """ARQ job entry point for the outreach graph."""
     if settings.MOCK_MODE:
-        await _run_mock_outreach(job_id)
+        await _run_mock_outreach(job_id, tenant_id)
     else:
-        await _run_real_outreach(job_id, company_name, contact_name, product_profile)
+        await _run_real_outreach(
+            job_id, tenant_id, company_name, contact_name, product_profile
+        )
 
 
-async def _update_step(job_id: str, step: str) -> None:
+async def _update_step(job_id: str, tenant_id: str, step: str) -> None:
     """Commit current_step in its own session so the polling API sees it immediately.
 
     Previously this shared the outer transaction and only called flush(), making
     step updates invisible to other DB connections until the whole job committed.
     """
-    async with AsyncSessionLocal() as db:
+    async with tenant_session(tenant_id) as db:
         await db.execute(
             update(OutreachJob)
             .where(OutreachJob.id == job_id)
@@ -69,19 +72,19 @@ async def _update_step(job_id: str, step: str) -> None:
         await db.commit()
 
 
-async def _run_mock_outreach(job_id: str) -> None:
+async def _run_mock_outreach(job_id: str, tenant_id: str) -> None:
     import pathlib
 
     fixtures_dir = pathlib.Path(__file__).parent.parent.parent / "fixtures"
 
     for step in ("researching", "personalizing", "scheduling"):
-        await _update_step(job_id, step)
+        await _update_step(job_id, tenant_id, step)
         await asyncio.sleep(2)
 
     draft = json.loads((fixtures_dir / "outreach_draft.json").read_text(encoding="utf-8"))
     schedule = json.loads((fixtures_dir / "schedule_output.json").read_text(encoding="utf-8"))
 
-    async with AsyncSessionLocal() as db:
+    async with tenant_session(tenant_id) as db:
         await db.execute(
             update(OutreachJob)
             .where(OutreachJob.id == job_id)
@@ -101,6 +104,7 @@ async def _run_mock_outreach(job_id: str) -> None:
 
 async def _run_real_outreach(
     job_id: str,
+    tenant_id: str,
     company_name: str,
     contact_name: str | None,
     product_profile: dict,
@@ -152,7 +156,7 @@ async def _run_real_outreach(
                 )
 
             if node_name in _NODE_STEP_MAP:
-                await _update_step(job_id, _NODE_STEP_MAP[node_name])
+                await _update_step(job_id, tenant_id, _NODE_STEP_MAP[node_name])
 
         final_state = accumulated_state
 
@@ -176,7 +180,7 @@ async def _run_real_outreach(
             except Exception:
                 pass
 
-        async with AsyncSessionLocal() as db:
+        async with tenant_session(tenant_id) as db:
             await db.execute(
                 update(OutreachJob)
                 .where(OutreachJob.id == job_id)
@@ -195,7 +199,7 @@ async def _run_real_outreach(
 
     except Exception as exc:
         try:
-            async with AsyncSessionLocal() as db:
+            async with tenant_session(tenant_id) as db:
                 await db.execute(
                     update(OutreachJob)
                     .where(OutreachJob.id == job_id)

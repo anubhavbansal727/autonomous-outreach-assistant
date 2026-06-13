@@ -229,6 +229,7 @@ async def generate(
         "run_outreach_job",
         job_id=str(job.id),
         user_id=str(ctx.user.id),
+        tenant_id=str(ctx.tenant_id),
         company_name=body.company_name,
         contact_name=body.contact_name,
         product_profile=_profile_to_dict(profile),
@@ -314,6 +315,7 @@ async def create_batch(
         "run_batch_job",
         batch_id=str(batch_id),
         user_id=str(ctx.user.id),
+        tenant_id=str(ctx.tenant_id),
         prospects=payload,
         product_profile=_profile_to_dict(profile),
     )
@@ -567,6 +569,7 @@ async def retry(
         "run_outreach_job",
         job_id=str(job.id),
         user_id=str(ctx.user.id),
+        tenant_id=str(ctx.tenant_id),
         company_name=job.company_name,
         contact_name=job.contact_name,
         product_profile=_profile_to_dict(profile),
