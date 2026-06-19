@@ -163,6 +163,22 @@ class TestLogin:
         assert resp.json()["must_change_password"] is True
         assert resp.json()["role"] == "member"
 
+    async def test_login_suspended_member_rejected(self, anon_client, mock_db):
+        mock_db.execute.side_effect = _login_results(
+            _db_user(), _db_membership(status="suspended")
+        )
+
+        with patch("app.routers.auth.bcrypt") as mock_bcrypt:
+            mock_bcrypt.checkpw.return_value = True  # credentials are valid
+
+            resp = await anon_client.post(
+                "/auth/login",
+                json={"email": "test@example.com", "password": "correctpassword"},
+            )
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["code"] == "MEMBERSHIP_SUSPENDED"
+
     async def test_login_sets_refresh_cookie(self, anon_client, mock_db):
         mock_db.execute.side_effect = _login_results(_db_user(), _db_membership())
 

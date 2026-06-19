@@ -50,6 +50,16 @@ async def _resolve_membership(db: AsyncSession, user_id) -> Membership | None:
     result = await db.execute(select(Membership).where(Membership.user_id == user_id))
     return result.scalar_one_or_none()
 
+
+def _reject_if_suspended(membership: Membership | None) -> None:
+    """Block token issuance for a suspended member (get_current_user also guards
+    every request, but rejecting at the door is clearer and avoids minting cookies)."""
+    if membership is not None and membership.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "Your account has been suspended", "code": "MEMBERSHIP_SUSPENDED"},
+        )
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE = "refresh_token"
@@ -128,6 +138,7 @@ async def login(
         )
 
     membership = await _resolve_membership(db, user.id)
+    _reject_if_suspended(membership)
     tenant_id = str(membership.tenant_id) if membership else None
     role = membership.role if membership else None
 
@@ -182,6 +193,7 @@ async def refresh(
         )
 
     membership = await _resolve_membership(db, user.id)
+    _reject_if_suspended(membership)
     tenant_id = str(membership.tenant_id) if membership else None
     role = membership.role if membership else None
 

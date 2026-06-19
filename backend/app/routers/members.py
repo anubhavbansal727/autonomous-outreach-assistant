@@ -227,16 +227,18 @@ async def update_member(
         changes["status"] = {"from": membership.status, "to": body.status}
         membership.status = body.status
 
-    if changes:
-        action = "member.role_changed" if "role" in changes else "member.status_changed"
-        await record_audit(
-            db,
-            tenant_id=ctx.tenant_id,
-            actor_user_id=ctx.user.id,
-            action=action,
-            target=str(membership.user_id),
-            meta=changes,
-        )
+    # One audit row per kind of change, so a single PATCH that changes both role
+    # and status is searchable under each action (not collapsed into one label).
+    for field, action in (("role", "member.role_changed"), ("status", "member.status_changed")):
+        if field in changes:
+            await record_audit(
+                db,
+                tenant_id=ctx.tenant_id,
+                actor_user_id=ctx.user.id,
+                action=action,
+                target=str(membership.user_id),
+                meta={field: changes[field]},
+            )
     await db.commit()
     # No refresh after commit: the RLS GUC has reverted (memberships is RLS-
     # protected). expire_on_commit=False keeps the in-memory membership valid;

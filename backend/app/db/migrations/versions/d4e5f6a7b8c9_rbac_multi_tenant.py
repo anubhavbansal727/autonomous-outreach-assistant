@@ -223,11 +223,18 @@ def downgrade() -> None:
     )
 
     op.add_column('product_profiles', sa.Column('user_id', sa.UUID(), nullable=True))
+    # Re-derive the v2 owner column. Prefer the actual creator; fall back to the
+    # tenant's earliest-joined owner (deterministic) for profiles whose creator
+    # was since removed. A tenant always has >= 1 owner (last-owner protection).
     op.execute(
         """
-        UPDATE product_profiles p SET user_id = m.user_id
-        FROM memberships m
-        WHERE m.tenant_id = p.tenant_id AND m.role = 'owner'
+        UPDATE product_profiles p SET user_id = COALESCE(
+            p.created_by_user_id,
+            (SELECT m.user_id FROM memberships m
+             WHERE m.tenant_id = p.tenant_id AND m.role = 'owner'
+             ORDER BY m.created_at, m.user_id
+             LIMIT 1)
+        )
         """
     )
     op.alter_column('product_profiles', 'user_id', nullable=False)

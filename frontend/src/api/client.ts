@@ -30,7 +30,11 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' })
 
-  if (res.status === 401) {
+  // A 401 from the auth endpoints themselves (e.g. wrong password) is a real
+  // error to surface, NOT an expired session — don't run the refresh/redirect.
+  const isAuthEndpoint = path.startsWith('/auth/')
+
+  if (res.status === 401 && !isAuthEndpoint) {
     try {
       const newToken = await refreshToken()
       headers['Authorization'] = `Bearer ${newToken}`
@@ -51,8 +55,11 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
     let errBody: ApiError = { error: 'Request failed', code: 'UNKNOWN' }
     try {
       const parsed = await res.json()
-      // FastAPI nests our error payload under `detail`.
-      errBody = (parsed?.detail ?? parsed) as ApiError
+      // FastAPI nests our { error, code } payload under `detail`. For 422 the
+      // detail is an ARRAY of validation errors — keep the top-level object then
+      // so consumers reading `.error` still get a sensible fallback.
+      const detail = parsed?.detail
+      errBody = (detail && !Array.isArray(detail) ? detail : parsed) as ApiError
     } catch {}
     // A member who still owes a forced password reset is bounced to the reset
     // screen for any protected call.

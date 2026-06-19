@@ -117,9 +117,11 @@ class TestBackfillMigration:
                 pp_cols = await _columns(conn, "product_profiles")
                 assert "tenant_id" in pp_cols and "user_id" not in pp_cols
         finally:
-            # Clean up seeded rows and guarantee the DB is back at head.
+            # Restoring head must NOT be swallowed: if it fails, later RLS tests
+            # would silently run against the v2 schema. Let it raise.
+            run_alembic("upgrade", "head")
+            # Row cleanup is best-effort (the schema is already restored).
             try:
-                run_alembic("upgrade", "head")
                 async with owner_engine.begin() as conn:
                     # Deleting the tenants cascades profiles/jobs/memberships.
                     await conn.execute(
