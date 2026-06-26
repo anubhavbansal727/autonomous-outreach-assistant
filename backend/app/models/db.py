@@ -3,10 +3,15 @@
 In plain English (read this first):
 - This file defines the database TABLES as Python classes. One class = one
   table; one attribute = one column.
-- The five tables: ``User`` (login accounts), ``ProductProfile`` (what the
-  user is selling), ``IngestionJob`` (a website-scrape-to-profile run),
-  ``OutreachJob`` (one generated email/LinkedIn draft — the central record),
-  and ``BatchJob`` (a parent row for a CSV of many prospects).
+- The tables: ``Tenant`` (a company workspace), ``Membership`` (which user
+  belongs to which tenant, and their role), ``User`` (login accounts),
+  ``ProductProfile`` (what the company is selling — shared tenant-wide),
+  ``IngestionJob`` (a website-scrape-to-profile run), ``OutreachJob`` (one
+  generated email/LinkedIn draft — the central record), ``BatchJob`` (a parent
+  row for a CSV of many prospects), and ``AuditLog`` (who did what, per tenant).
+- Multi-tenancy: every tenant-scoped table carries a ``tenant_id`` column.
+  Postgres Row-Level Security policies (see the rbac migration) make it
+  impossible to read another tenant's rows, even with an unfiltered query.
 - ``CheckConstraint``s make the database itself reject invalid values (e.g. a
   status that isn't 'running'/'done'/'failed'). The rules live in the DB, not
   just in Python.
@@ -51,7 +56,141 @@ class Base(DeclarativeBase):
 
 
 # ---------------------------------------------------------------------------
-# User
+# Tenant — the company workspace; all shared config lives here
+# ---------------------------------------------------------------------------
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    slug: Mapped[str | None] = mapped_column(TEXT, unique=True, nullable=True)
+    # Verified sending domain — shared by every member of the tenant.
+    resend_domain: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("NOW()"),
+        nullable=False,
+    )
+
+    # Relationships
+    memberships: Mapped[list[Membership]] = relationship(
+        "Membership",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Membership — links a user to a tenant and carries their role
+# ---------------------------------------------------------------------------
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(TEXT, nullable=False)
+    status: Mapped[str] = mapped_column(
+        TEXT,
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("NOW()"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("NOW()"),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'member', 'viewer')",
+            name="ck_memberships_role",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'suspended')",
+            name="ck_memberships_status",
+        ),
+        # v3: a user belongs to exactly one tenant.
+        Index("uq_memberships_user_id", "user_id", unique=True),
+        Index("ix_memberships_tenant_id", "tenant_id"),
+    )
+
+    # Relationships
+    tenant: Mapped[Tenant] = relationship(
+        "Tenant", back_populates="memberships", lazy="noload"
+    )
+    user: Mapped[User] = relationship(
+        "User", back_populates="membership", lazy="noload"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AuditLog — who did what, per tenant (member/role/tenant mutations, sends)
+# ---------------------------------------------------------------------------
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(TEXT, nullable=False)
+    target: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    # Column is named "metadata" in the DB; that word is reserved on Python
+    # declarative models, so the attribute is `meta`.
+    meta: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("NOW()"),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_audit_logs_tenant_id_created_at", "tenant_id", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# User — global identity only; tenant context lives on Membership
 # ---------------------------------------------------------------------------
 
 
@@ -65,7 +204,11 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(TEXT, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(TEXT, nullable=False)
-    resend_domain: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    # True when an admin created this account with a temporary password; the
+    # user must change it before using the rest of the app.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=text("NOW()"),
@@ -73,11 +216,12 @@ class User(Base):
     )
 
     # Relationships
-    profiles: Mapped[list[ProductProfile]] = relationship(
-        "ProductProfile",
+    membership: Mapped[Membership | None] = relationship(
+        "Membership",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="noload",
+        uselist=False,
     )
     ingestion_jobs: Mapped[list[IngestionJob]] = relationship(
         "IngestionJob",
@@ -100,7 +244,7 @@ class User(Base):
 
 
 # ---------------------------------------------------------------------------
-# ProductProfile
+# ProductProfile — shared tenant-wide ("shared config"); not per-user
 # ---------------------------------------------------------------------------
 
 
@@ -112,10 +256,16 @@ class ProductProfile(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # Audit trail only — profiles belong to the tenant, not their creator.
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
     source_url: Mapped[str | None] = mapped_column(TEXT, nullable=True)
     product_name: Mapped[str] = mapped_column(TEXT, nullable=False)
@@ -146,21 +296,17 @@ class ProductProfile(Base):
     )
 
     __table_args__ = (
-        # FK declared inline via ForeignKey is not used here so that the
-        # constraint can be expressed alongside the table args block cleanly.
-        # We use the SQLAlchemy ForeignKeyConstraint approach instead.
-        Index("ix_product_profiles_user_id", "user_id"),
-        # Partial unique index: only one active profile per user at a time.
+        Index("ix_product_profiles_tenant_id", "tenant_id"),
+        # Partial unique index: only one active profile per tenant at a time.
         Index(
-            "uq_product_profiles_user_id_active",
-            "user_id",
+            "uq_product_profiles_tenant_id_active",
+            "tenant_id",
             unique=True,
             postgresql_where=text("is_active = true"),
         ),
     )
 
     # Relationships
-    user: Mapped[User] = relationship("User", back_populates="profiles", lazy="noload")
     outreach_jobs: Mapped[list[OutreachJob]] = relationship(
         "OutreachJob",
         back_populates="product_profile",
@@ -180,6 +326,11 @@ class IngestionJob(Base):
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -214,6 +365,7 @@ class IngestionJob(Base):
             name="ck_ingestion_jobs_current_step",
         ),
         Index("ix_ingestion_jobs_user_id", "user_id"),
+        Index("ix_ingestion_jobs_tenant_id", "tenant_id"),
     )
 
     # Relationships
@@ -235,6 +387,12 @@ class OutreachJob(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The member who created this outreach — it stays private to them.
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -307,6 +465,12 @@ class OutreachJob(Base):
         ),
         Index("ix_outreach_jobs_user_id", "user_id"),
         Index("ix_outreach_jobs_user_id_created_at", "user_id", "created_at"),
+        Index(
+            "ix_outreach_jobs_tenant_id_user_id_created_at",
+            "tenant_id",
+            "user_id",
+            "created_at",
+        ),
         Index("ix_outreach_jobs_batch_id", "batch_id"),
         Index(
             "ix_outreach_jobs_status_running",
@@ -339,6 +503,11 @@ class BatchJob(Base):
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -379,6 +548,7 @@ class BatchJob(Base):
             name="ck_batch_jobs_status",
         ),
         Index("ix_batch_jobs_user_id_created_at", "user_id", "created_at"),
+        Index("ix_batch_jobs_tenant_id", "tenant_id"),
     )
 
     # Relationships

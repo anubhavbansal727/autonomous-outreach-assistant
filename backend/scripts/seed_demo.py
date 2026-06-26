@@ -27,8 +27,16 @@ import bcrypt
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal, engine
-from app.models.db import Base, IngestionJob, OutreachJob, ProductProfile, User
+from app.db.session import AsyncSessionLocal, bind_tenant_context, engine
+from app.models.db import (
+    Base,
+    IngestionJob,
+    Membership,
+    OutreachJob,
+    ProductProfile,
+    Tenant,
+    User,
+)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -62,37 +70,63 @@ def _utc_days_ago(n: int) -> datetime:
 # ---------------------------------------------------------------------------
 
 
-async def _upsert_user(db: AsyncSession) -> User:
+async def _upsert_user(db: AsyncSession) -> tuple[User, Tenant]:
+    """Create (or refresh) the demo user with their own tenant + Owner membership."""
     result = await db.execute(select(User).where(User.email == DEMO_EMAIL))
     user = result.scalar_one_or_none()
     if user is None:
         user = User(
             email=DEMO_EMAIL,
             password_hash=_hash(DEMO_PASSWORD),
-            resend_domain="datapulse.io",
         )
         db.add(user)
         await db.flush()
         print(f"  Created user: {DEMO_EMAIL}")
     else:
         user.password_hash = _hash(DEMO_PASSWORD)
-        user.resend_domain = "datapulse.io"
         print(f"  Updated existing user: {DEMO_EMAIL}")
-    return user
+
+    # Bind the user GUC so the membership lookup passes RLS when the seeder
+    # runs as a non-superuser role.
+    await bind_tenant_context(db, user_id=user.id)
+
+    membership_result = await db.execute(
+        select(Membership).where(Membership.user_id == user.id)
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership is None:
+        # Personal tenant reuses the user's UUID, mirroring the rbac migration.
+        await bind_tenant_context(db, tenant_id=user.id)
+        tenant = Tenant(id=user.id, name="DataPulse", resend_domain="datapulse.io")
+        db.add(tenant)
+        db.add(Membership(tenant_id=tenant.id, user_id=user.id, role="owner"))
+        await db.flush()
+        print("  Created tenant 'DataPulse' (demo user = owner)")
+    else:
+        await bind_tenant_context(db, tenant_id=membership.tenant_id)
+        tenant_result = await db.execute(
+            select(Tenant).where(Tenant.id == membership.tenant_id)
+        )
+        tenant = tenant_result.scalar_one()
+        tenant.resend_domain = "datapulse.io"
+        print(f"  Reusing tenant '{tenant.name}'")
+
+    return user, tenant
 
 
-async def _upsert_profile(db: AsyncSession, user: User) -> ProductProfile:
-    # Deactivate any existing active profiles for this user.
+async def _upsert_profile(db: AsyncSession, user: User, tenant: Tenant) -> ProductProfile:
+    # Deactivate any existing active profiles for this tenant.
     await db.execute(
         update(ProductProfile)
-        .where(ProductProfile.user_id == user.id, ProductProfile.is_active == True)  # noqa: E712
+        .where(ProductProfile.tenant_id == tenant.id, ProductProfile.is_active == True)  # noqa: E712
         .values(is_active=False)
     )
 
     profile_data: dict = _load_json("product_profile.json")  # type: ignore[assignment]
 
     profile = ProductProfile(
-        user_id=user.id,
+        tenant_id=tenant.id,
+        created_by_user_id=user.id,
         source_url="https://datapulse.io",
         product_name=profile_data["product_name"],
         one_liner=profile_data.get("one_liner"),
@@ -111,7 +145,7 @@ async def _upsert_profile(db: AsyncSession, user: User) -> ProductProfile:
 
 
 async def _seed_outreach_jobs(
-    db: AsyncSession, user: User, profile: ProductProfile
+    db: AsyncSession, user: User, tenant: Tenant, profile: ProductProfile
 ) -> None:
     # Remove previous seed jobs for this user so we start fresh.
     await db.execute(delete(OutreachJob).where(OutreachJob.user_id == user.id))
@@ -131,6 +165,7 @@ async def _seed_outreach_jobs(
             sent_at = completed + timedelta(minutes=5) if completed else None
 
         job = OutreachJob(
+            tenant_id=tenant.id,
             user_id=user.id,
             product_profile_id=profile.id,
             company_name=entry["company_name"],
@@ -168,9 +203,9 @@ async def main() -> None:
 
     async with AsyncSessionLocal() as db:
         async with db.begin():
-            user = await _upsert_user(db)
-            profile = await _upsert_profile(db, user)
-            await _seed_outreach_jobs(db, user, profile)
+            user, tenant = await _upsert_user(db)
+            profile = await _upsert_profile(db, user, tenant)
+            await _seed_outreach_jobs(db, user, tenant, profile)
 
     print("\nDone. Demo credentials:")
     print(f"  Email:    {DEMO_EMAIL}")

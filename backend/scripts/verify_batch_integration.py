@@ -13,26 +13,32 @@ import uuid
 
 from sqlalchemy import delete, select
 
-from app.db.session import AsyncSessionLocal
-from app.models.db import BatchJob, OutreachJob, ProductProfile, User
+from app.db.session import AsyncSessionLocal, bind_tenant_context
+from app.models.db import BatchJob, Membership, OutreachJob, ProductProfile, Tenant, User
 
 
 async def _seed(db, n: int) -> tuple[uuid.UUID, list[uuid.UUID]]:
     user = User(email=f"batchtest+{uuid.uuid4().hex[:8]}@example.com", password_hash="x")
     db.add(user)
     await db.flush()
-    profile = ProductProfile(user_id=user.id, product_name="Test Product", is_active=True)
+    # Personal tenant reuses the user's UUID (same pattern as the rbac migration).
+    await bind_tenant_context(db, tenant_id=user.id, user_id=user.id)
+    db.add(Tenant(id=user.id, name="Batch Test Tenant"))
+    db.add(Membership(tenant_id=user.id, user_id=user.id, role="owner"))
+    profile = ProductProfile(tenant_id=user.id, created_by_user_id=user.id,
+                             product_name="Test Product", is_active=True)
     db.add(profile)
     await db.flush()
 
     batch_id = uuid.uuid4()
-    db.add(BatchJob(id=batch_id, user_id=user.id, product_profile_id=profile.id,
-                    status="running", total=n))
+    db.add(BatchJob(id=batch_id, tenant_id=user.id, user_id=user.id,
+                    product_profile_id=profile.id, status="running", total=n))
     child_ids = []
     for i in range(n):
         jid = uuid.uuid4()
         child_ids.append(jid)
-        db.add(OutreachJob(id=jid, user_id=user.id, product_profile_id=profile.id,
+        db.add(OutreachJob(id=jid, tenant_id=user.id, user_id=user.id,
+                           product_profile_id=profile.id,
                            batch_id=batch_id, batch_index=i, company_name=f"Company {i}",
                            status="running", current_step="researching"))
     await db.commit()
@@ -41,9 +47,12 @@ async def _seed(db, n: int) -> tuple[uuid.UUID, list[uuid.UUID]]:
 
 async def _cleanup(user_id):
     async with AsyncSessionLocal() as db:
+        # tenant_id == user_id for rows seeded above
+        await bind_tenant_context(db, tenant_id=user_id, user_id=user_id)
         await db.execute(delete(OutreachJob).where(OutreachJob.user_id == user_id))
         await db.execute(delete(BatchJob).where(BatchJob.user_id == user_id))
-        await db.execute(delete(ProductProfile).where(ProductProfile.user_id == user_id))
+        await db.execute(delete(ProductProfile).where(ProductProfile.tenant_id == user_id))
+        await db.execute(delete(Tenant).where(Tenant.id == user_id))  # cascades membership
         await db.execute(delete(User).where(User.id == user_id))
         await db.commit()
 
@@ -96,7 +105,8 @@ async def test_real_graph():
     try:
         prospects = [{"index": i, "job_id": str(cid), "company_name": f"Company {i}",
                       "contact_name": ""} for i, cid in enumerate(child_ids)]
-        await _run_real_batch(str(batch_id), prospects, {"product_name": "Test Product"})
+        # tenant_id == user_id for rows created by _seed.
+        await _run_real_batch(str(batch_id), str(user_id), prospects, {"product_name": "Test Product"})
         await _assert_done(batch_id, n, "real-graph")
     finally:
         await _cleanup(user_id)
@@ -110,7 +120,7 @@ async def test_mock_path():
         batch_id, child_ids, user_id = await _seed(db, n)
     try:
         prospects = [{"index": i, "job_id": str(cid)} for i, cid in enumerate(child_ids)]
-        await _run_mock_batch(str(batch_id), prospects)
+        await _run_mock_batch(str(batch_id), str(user_id), prospects)
         await _assert_done(batch_id, n, "mock-path")
     finally:
         await _cleanup(user_id)

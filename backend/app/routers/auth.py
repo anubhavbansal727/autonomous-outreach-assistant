@@ -1,8 +1,10 @@
 """routers/auth.py — signup / login / logout endpoints (URLs under /auth).
 
 In plain English:
-- ``/register`` creates an account. Passwords are never stored as-is — bcrypt
-  hashes them (one-way, salted) so a database leak doesn't expose passwords.
+- ``/register`` creates an account AND a brand-new tenant (company workspace),
+  making the registrant its Owner — this is the only self-service signup path.
+  Passwords are never stored as-is — bcrypt hashes them (one-way, salted) so a
+  database leak doesn't expose passwords.
 - ``/login`` checks the password and, on success, returns an access token plus
   sets the refresh token as a secure http-only cookie (JavaScript can't read
   it, which limits theft).
@@ -25,18 +27,38 @@ from app.auth.dependencies import (
     create_refresh_token,
     get_current_user,
 )
+from app.auth.permissions import permissions_for
 from app.config import settings
-from app.db.session import get_db
-from app.models.db import User
+from app.db.session import bind_tenant_context, get_db
+from app.models.db import Membership, Tenant, User
 from app.models.schemas import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     LogoutResponse,
     MeResponse,
     RefreshResponse,
     RegisterRequest,
+    TenantInfo,
     TokenResponse,
-    UpdateMeRequest,
 )
+
+
+async def _resolve_membership(db: AsyncSession, user_id) -> Membership | None:
+    """Load a user's membership, binding the user GUC so RLS allows the read."""
+    await bind_tenant_context(db, user_id=str(user_id))
+    result = await db.execute(select(Membership).where(Membership.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+def _reject_if_suspended(membership: Membership | None) -> None:
+    """Block token issuance for a suspended member (get_current_user also guards
+    every request, but rejecting at the door is clearer and avoids minting cookies)."""
+    if membership is not None and membership.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "Your account has been suspended", "code": "MEMBERSHIP_SUSPENDED"},
+        )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -63,20 +85,41 @@ async def register(
             detail={"error": "Email already registered", "code": "EMAIL_EXISTS"},
         )
 
+    # Registering bootstraps a brand-new tenant with this user as its Owner.
+    # IDs are generated client-side so the RLS context can be bound before the
+    # INSERTs (the policies' WITH CHECK applies to new rows too).
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    await bind_tenant_context(db, tenant_id=tenant_id, user_id=user_id)
+
+    local_part = body.email.split("@", 1)[0]
+    db.add(Tenant(id=tenant_id, name=f"{local_part}'s workspace"))
     user = User(
+        id=user_id,
         email=body.email,
         password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
     )
     db.add(user)
+    db.add(Membership(tenant_id=tenant_id, user_id=user_id, role="owner"))
     await db.flush()
     await db.refresh(user)
     await db.commit()
 
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    access_token = create_access_token(
+        str(user.id), tenant_id=str(tenant_id), role="owner"
+    )
+    refresh_token = create_refresh_token(
+        str(user.id), tenant_id=str(tenant_id), role="owner"
+    )
 
     response.set_cookie(REFRESH_COOKIE, refresh_token, **COOKIE_OPTS)
-    return TokenResponse(access_token=access_token, user_id=str(user.id))
+    return TokenResponse(
+        access_token=access_token,
+        user_id=str(user.id),
+        tenant_id=str(tenant_id),
+        role="owner",
+        must_change_password=False,
+    )
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
@@ -94,11 +137,22 @@ async def login(
             detail={"error": "Invalid email or password", "code": "INVALID_CREDENTIALS"},
         )
 
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
+    membership = await _resolve_membership(db, user.id)
+    _reject_if_suspended(membership)
+    tenant_id = str(membership.tenant_id) if membership else None
+    role = membership.role if membership else None
+
+    access_token = create_access_token(str(user.id), tenant_id=tenant_id, role=role)
+    refresh_token = create_refresh_token(str(user.id), tenant_id=tenant_id, role=role)
 
     response.set_cookie(REFRESH_COOKIE, refresh_token, **COOKIE_OPTS)
-    return TokenResponse(access_token=access_token, user_id=str(user.id))
+    return TokenResponse(
+        access_token=access_token,
+        user_id=str(user.id),
+        tenant_id=tenant_id,
+        role=role,
+        must_change_password=user.must_change_password,
+    )
 
 
 @router.post("/refresh", response_model=RefreshResponse, status_code=status.HTTP_200_OK)
@@ -138,7 +192,14 @@ async def refresh(
             detail={"error": "User not found", "code": "USER_NOT_FOUND"},
         )
 
-    return RefreshResponse(access_token=create_access_token(str(user.id)))
+    membership = await _resolve_membership(db, user.id)
+    _reject_if_suspended(membership)
+    tenant_id = str(membership.tenant_id) if membership else None
+    role = membership.role if membership else None
+
+    return RefreshResponse(
+        access_token=create_access_token(str(user.id), tenant_id=tenant_id, role=role)
+    )
 
 
 @router.post("/logout", response_model=LogoutResponse, status_code=status.HTTP_200_OK)
@@ -147,29 +208,57 @@ async def logout(response: Response) -> LogoutResponse:
     return LogoutResponse()
 
 
-@router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
-async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
-    return MeResponse(
-        user_id=current_user.id,
-        email=current_user.email,
-        resend_domain=current_user.resend_domain,
-        created_at=current_user.created_at,
-    )
-
-
-@router.patch("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
-async def update_me(
-    body: UpdateMeRequest,
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def change_password(
+    body: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> MeResponse:
-    if body.resend_domain is not None:
-        current_user.resend_domain = body.resend_domain or None
+) -> ChangePasswordResponse:
+    """Set a new password. Clears the forced-reset flag for admin-created members.
+
+    Deliberately NOT behind require_password_changed, so a member who still owes
+    a reset can call it.
+    """
+    if not bcrypt.checkpw(
+        body.current_password.encode(), current_user.password_hash.encode()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "Current password is incorrect", "code": "INVALID_CREDENTIALS"},
+        )
+
+    current_user.password_hash = bcrypt.hashpw(
+        body.new_password.encode(), bcrypt.gensalt()
+    ).decode()
+    current_user.must_change_password = False
     await db.commit()
-    await db.refresh(current_user)
+    return ChangePasswordResponse()
+
+
+# resend_domain moved from users to tenants in v3 — it is shared sending config.
+# Editing it is owner-only and lives on PATCH /tenant (tenant.manage); /me only
+# mirrors the tenant's value for read convenience.
+
+
+def _me_response(current_user: User) -> MeResponse:
+    """Build the /me payload from the tenant-enriched User (see get_current_user)."""
+    tenant = current_user.tenant
     return MeResponse(
         user_id=current_user.id,
         email=current_user.email,
-        resend_domain=current_user.resend_domain,
+        resend_domain=tenant.resend_domain if tenant else None,
         created_at=current_user.created_at,
+        must_change_password=current_user.must_change_password,
+        role=current_user.role,
+        permissions=permissions_for(current_user.role),
+        tenant=TenantInfo.model_validate(tenant) if tenant else None,
     )
+
+
+@router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
+async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
+    return _me_response(current_user)

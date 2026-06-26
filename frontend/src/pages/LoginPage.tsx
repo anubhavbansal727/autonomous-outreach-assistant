@@ -22,11 +22,8 @@ export function LoginPage() {
       const data = await apiFetch<{ access_token: string; user_id: string }>('/auth/login', {
         method: 'POST', body: JSON.stringify({ email, password }),
       })
-      const me = await apiFetch<{ user_id: string; email: string; resend_domain: string | null; created_at: string }>('/auth/me', {
-        headers: { Authorization: `Bearer ${data.access_token}` },
-      })
-      login(data.access_token, { id: me.user_id, email: me.email, resend_domain: me.resend_domain, created_at: me.created_at })
-      navigate('/')
+      const user = await login(data.access_token)
+      navigate(user.must_change_password ? '/change-password' : '/')
     } catch (err: unknown) {
       setError((err as { error?: string })?.error ?? 'Login failed')
     } finally { setLoading(false) }

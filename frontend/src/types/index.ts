@@ -1,7 +1,42 @@
+export type Role = 'owner' | 'admin' | 'member' | 'viewer'
+export type MemberStatus = 'active' | 'suspended'
+
+export interface Tenant {
+  id: string
+  name: string
+  resend_domain: string | null
+}
+
 export interface User {
   id: string
   email: string
   resend_domain: string | null
+  created_at: string
+  // v3 RBAC context (sourced from /auth/me)
+  role: Role | null
+  permissions: string[]
+  must_change_password: boolean
+  tenant: Tenant | null
+}
+
+/** Raw shape of GET /auth/me. */
+export interface MeResponse {
+  user_id: string
+  email: string
+  resend_domain: string | null
+  created_at: string
+  role: Role | null
+  permissions: string[]
+  must_change_password: boolean
+  tenant: Tenant | null
+}
+
+export interface Member {
+  user_id: string
+  membership_id: string
+  email: string
+  role: Role
+  status: MemberStatus
   created_at: string
 }
 

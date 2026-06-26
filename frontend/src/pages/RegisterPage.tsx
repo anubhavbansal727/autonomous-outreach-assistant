@@ -23,7 +23,7 @@ export function RegisterPage() {
       const data = await apiFetch<{ access_token: string; user_id: string }>('/auth/register', {
         method: 'POST', body: JSON.stringify({ email, password }),
       })
-      login(data.access_token, { id: data.user_id, email, resend_domain: null, created_at: new Date().toISOString() })
+      await login(data.access_token)
       navigate('/')
     } catch (err: unknown) {
       setError((err as { error?: string })?.error ?? 'Registration failed')

@@ -17,13 +17,14 @@ background worker (see worker.py) so requests stay fast.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.dependencies import require_password_changed
 from app.config import settings
 from app.db.session import engine
 from app.models.db import Base
-from app.routers import auth, crm, health, outreach, profile
+from app.routers import auth, crm, health, members, outreach, profile, tenant
 
 
 @asynccontextmanager
@@ -45,10 +46,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # /auth is exempt from the forced-reset guard so a member who still owes a
+    # password change can reach /auth/me, /auth/change-password and /auth/logout.
     app.include_router(auth.router)
-    app.include_router(profile.router)
-    app.include_router(outreach.router)
-    app.include_router(crm.router)
+
+    # Every other protected router is blocked (403 PASSWORD_CHANGE_REQUIRED)
+    # until a forced reset is completed.
+    protected = [Depends(require_password_changed)]
+    app.include_router(profile.router, dependencies=protected)
+    app.include_router(outreach.router, dependencies=protected)
+    app.include_router(crm.router, dependencies=protected)
+    app.include_router(members.router, dependencies=protected)
+    app.include_router(tenant.router, dependencies=protected)
+
     app.include_router(health.router)
 
     return app

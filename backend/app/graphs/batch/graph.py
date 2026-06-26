@@ -61,7 +61,7 @@ from langgraph.constants import Send
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import update
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import tenant_session
 from app.graphs.outreach.graph import (
     extract_schedule_node,
     personalize_node,
@@ -187,7 +187,7 @@ async def research_one(task: ResearchTask) -> dict:
     research_output = result.get("research_output", "") or ""
 
     # Atomic increment — safe under concurrent branches.
-    async with AsyncSessionLocal() as db:
+    async with tenant_session(task["tenant_id"]) as db:
         await db.execute(
             update(BatchJob)
             .where(BatchJob.id == task["batch_id"])
@@ -211,6 +211,7 @@ async def research_one(task: ResearchTask) -> dict:
 async def personalize_sequential(state: BatchState) -> dict:
     """Fan-in: personalise + schedule each prospect sequentially, in CSV order."""
     batch_id = state["batch_id"]
+    tenant_id = state["tenant_id"]
     product_profile = state["product_profile"]
     avoid_messaging = state["avoid_messaging"]
 
@@ -218,7 +219,7 @@ async def personalize_sequential(state: BatchState) -> dict:
         job_id = res["job_id"]
 
         # Mark this child as actively personalising so the per-prospect table updates.
-        async with AsyncSessionLocal() as db:
+        async with tenant_session(tenant_id) as db:
             await db.execute(
                 update(OutreachJob)
                 .where(OutreachJob.id == job_id)
@@ -238,7 +239,7 @@ async def personalize_sequential(state: BatchState) -> dict:
             )
         except Exception as exc:  # noqa: BLE001 — isolate per-prospect failures
             logger.exception("Personalisation failed for batch child %s", job_id)
-            async with AsyncSessionLocal() as db:
+            async with tenant_session(tenant_id) as db:
                 await db.execute(
                     update(OutreachJob)
                     .where(OutreachJob.id == job_id)
@@ -255,7 +256,7 @@ async def personalize_sequential(state: BatchState) -> dict:
             except Exception:  # noqa: BLE001
                 schedule_json = None
 
-        async with AsyncSessionLocal() as db:
+        async with tenant_session(tenant_id) as db:
             await db.execute(
                 update(OutreachJob)
                 .where(OutreachJob.id == job_id)

@@ -56,23 +56,48 @@ class TestCreateRefreshToken:
 class TestGetCurrentUser:
     @pytest.mark.asyncio
     async def test_valid_access_token_returns_user(self):
+        import uuid
+
         from app.auth.dependencies import create_access_token, get_current_user
         from fastapi.security import HTTPAuthorizationCredentials
 
+        tenant_id = uuid.uuid4()
         fake_user = MagicMock()
         fake_user.id = "user-123"
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = fake_user
+        membership = MagicMock()
+        membership.tenant_id = tenant_id
+        membership.role = "owner"
+        membership.status = "active"
+
+        tenant = MagicMock()
+        tenant.id = tenant_id
+
+        def _result(scalar):
+            r = MagicMock()
+            r.scalar_one_or_none.return_value = scalar
+            return r
 
         mock_db = AsyncMock()
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        # get_current_user issues: bind(user) → user lookup → membership lookup
+        # → bind(tenant) → tenant lookup. bind() results are ignored.
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                _result(None),        # bind user_id GUC
+                _result(fake_user),   # user lookup
+                _result(membership),  # membership lookup
+                _result(None),        # bind tenant_id GUC
+                _result(tenant),      # tenant lookup
+            ]
+        )
 
         token = create_access_token("user-123")
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
         user = await get_current_user(credentials=creds, db=mock_db)
         assert user is fake_user
+        assert user.tenant_id == tenant_id
+        assert user.role == "owner"
 
     @pytest.mark.asyncio
     async def test_refresh_token_raises_401(self):

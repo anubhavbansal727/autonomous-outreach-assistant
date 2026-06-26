@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from sqlalchemy import update
 
 from app.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import tenant_session
 from app.models.db import BatchJob, OutreachJob
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ async def run_batch_job(
     *,
     batch_id: str,
     user_id: str,
+    tenant_id: str,
     prospects: list[dict],
     product_profile: dict,
 ) -> None:
@@ -44,13 +45,13 @@ async def run_batch_job(
     default 120s worker timeout.
     """
     if settings.MOCK_MODE:
-        await _run_mock_batch(batch_id, prospects)
+        await _run_mock_batch(batch_id, tenant_id, prospects)
     else:
-        await _run_real_batch(batch_id, prospects, product_profile)
+        await _run_real_batch(batch_id, tenant_id, prospects, product_profile)
 
 
-async def _mark_batch(batch_id: str, **values) -> None:
-    async with AsyncSessionLocal() as db:
+async def _mark_batch(batch_id: str, tenant_id: str, **values) -> None:
+    async with tenant_session(tenant_id) as db:
         await db.execute(
             update(BatchJob).where(BatchJob.id == batch_id).values(**values)
         )
@@ -58,7 +59,7 @@ async def _mark_batch(batch_id: str, **values) -> None:
 
 
 async def _run_real_batch(
-    batch_id: str, prospects: list[dict], product_profile: dict
+    batch_id: str, tenant_id: str, prospects: list[dict], product_profile: dict
 ) -> None:
     from app.graphs.batch.graph import graph
     from app.graphs.batch.state import BatchState
@@ -73,6 +74,7 @@ async def _run_real_batch(
             "company_name": p["company_name"],
             "contact_name": p.get("contact_name") or "",
             "batch_id": batch_id,
+            "tenant_id": tenant_id,
             "product_profile": product_profile_json,
             "avoid_messaging": avoid_messaging,
         }
@@ -81,6 +83,7 @@ async def _run_real_batch(
 
     initial_state: BatchState = {
         "batch_id": batch_id,
+        "tenant_id": tenant_id,
         "product_profile": product_profile_json,
         "avoid_messaging": avoid_messaging,
         "prospects": tasks,
@@ -103,12 +106,12 @@ async def _run_real_batch(
             pass
 
         await _mark_batch(
-            batch_id, status="done", completed_at=datetime.now(timezone.utc)
+            batch_id, tenant_id, status="done", completed_at=datetime.now(timezone.utc)
         )
     except Exception as exc:
         logger.exception("Batch job %s failed", batch_id)
         try:
-            async with AsyncSessionLocal() as db:
+            async with tenant_session(tenant_id) as db:
                 # Don't strand any child as forever-running.
                 await db.execute(
                     update(OutreachJob)
@@ -133,7 +136,7 @@ async def _run_real_batch(
         raise
 
 
-async def _run_mock_batch(batch_id: str, prospects: list[dict]) -> None:
+async def _run_mock_batch(batch_id: str, tenant_id: str, prospects: list[dict]) -> None:
     """Fixture-driven batch for MOCK_MODE: increment counters with delays."""
     fixtures_dir = pathlib.Path(__file__).parent.parent.parent / "fixtures"
     draft = json.loads((fixtures_dir / "outreach_draft.json").read_text(encoding="utf-8"))
@@ -144,12 +147,12 @@ async def _run_mock_batch(batch_id: str, prospects: list[dict]) -> None:
     # Parallel research phase — counter climbs to total.
     for _ in ordered:
         await asyncio.sleep(1)
-        await _mark_batch(batch_id, research_done=BatchJob.research_done + 1)
+        await _mark_batch(batch_id, tenant_id, research_done=BatchJob.research_done + 1)
 
     # Sequential personalisation phase — write each child + climb the counter.
     for p in ordered:
         job_id = str(p["job_id"])
-        async with AsyncSessionLocal() as db:
+        async with tenant_session(tenant_id) as db:
             await db.execute(
                 update(OutreachJob)
                 .where(OutreachJob.id == job_id)
@@ -157,7 +160,7 @@ async def _run_mock_batch(batch_id: str, prospects: list[dict]) -> None:
             )
             await db.commit()
         await asyncio.sleep(1)
-        async with AsyncSessionLocal() as db:
+        async with tenant_session(tenant_id) as db:
             await db.execute(
                 update(OutreachJob)
                 .where(OutreachJob.id == job_id)
@@ -180,5 +183,5 @@ async def _run_mock_batch(batch_id: str, prospects: list[dict]) -> None:
             await db.commit()
 
     await _mark_batch(
-        batch_id, status="done", completed_at=datetime.now(timezone.utc)
+        batch_id, tenant_id, status="done", completed_at=datetime.now(timezone.utc)
     )

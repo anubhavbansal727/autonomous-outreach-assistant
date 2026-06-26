@@ -14,7 +14,7 @@ In plain English:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -39,6 +39,10 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user_id: str
+    # v3: tenant context surfaced so the client can route immediately after auth.
+    tenant_id: str | None = None
+    role: str | None = None
+    must_change_password: bool = False
 
 
 class RefreshResponse(BaseModel):
@@ -46,21 +50,127 @@ class RefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class TenantInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    resend_domain: str | None
+
+
 class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
     email: str
+    # resend_domain is the tenant's value, mirrored here for backward
+    # compatibility with the existing Settings page (until the Phase 6 frontend).
     resend_domain: str | None
     created_at: datetime
+    must_change_password: bool = False
+    # v3 RBAC context
+    role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+    tenant: TenantInfo | None = None
 
 
 class LogoutResponse(BaseModel):
     logged_out: bool = True
 
 
-class UpdateMeRequest(BaseModel):
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class ChangePasswordResponse(BaseModel):
+    changed: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Tenant (workspace settings)
+# ---------------------------------------------------------------------------
+
+
+class TenantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    resend_domain: str | None
+    created_at: datetime
+
+
+class UpdateTenantRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
     resend_domain: str | None = Field(default=None, max_length=253)
+
+
+# ---------------------------------------------------------------------------
+# Members (RBAC team management)
+# ---------------------------------------------------------------------------
+
+# Roles an admin may assign. "owner" is intentionally excluded — ownership is
+# granted only via PATCH by an existing owner, never at member-creation time.
+AssignableRole = Literal["admin", "member", "viewer"]
+
+
+class MemberResponse(BaseModel):
+    user_id: uuid.UUID
+    membership_id: uuid.UUID
+    email: str
+    role: str
+    status: str
+    created_at: datetime
+
+
+class MemberListResponse(BaseModel):
+    members: list[MemberResponse]
+
+
+class CreateMemberRequest(BaseModel):
+    email: EmailStr
+    role: AssignableRole
+
+
+class CreateMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    membership_id: uuid.UUID
+    email: str
+    role: str
+    # The system-generated one-time password, shown to the admin exactly once
+    # so they can relay it. The new member must change it on first login.
+    temporary_password: str
+
+
+class UpdateMemberRequest(BaseModel):
+    role: Literal["owner", "admin", "member", "viewer"] | None = None
+    status: Literal["active", "suspended"] | None = None
+
+
+class RemoveMemberResponse(BaseModel):
+    removed: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+
+class AuditLogEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    action: str
+    target: str | None
+    actor_user_id: uuid.UUID | None
+    # Maps to AuditLog.meta (the DB column is named "metadata").
+    meta: dict | None = None
+    created_at: datetime
+
+
+class AuditLogResponse(BaseModel):
+    items: list[AuditLogEntry]
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +275,8 @@ class OutreachStatusResponse(BaseModel):
 
 class OutreachResultResponse(BaseModel):
     id: uuid.UUID
+    # The member who owns this outreach — the UI gates edit/send on ownership.
+    user_id: uuid.UUID
     company_name: str
     contact_name: str | None
     status: str
