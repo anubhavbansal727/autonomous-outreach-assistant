@@ -1,6 +1,6 @@
 # Autonomous Outreach Assistant
 
-A production-grade **autonomous B2B outreach tool** built as a portfolio project to demonstrate real-world agentic AI patterns: multi-agent LangGraph orchestration, human-in-the-loop approval, async job queues, and JWT authentication.
+A production-grade **autonomous B2B outreach tool** built to demonstrate real-world agentic AI patterns: multi-agent LangGraph orchestration, human-in-the-loop approval, async job queues, and JWT authentication.
 
 Built by [Anubhav Bansal](https://github.com/anubhavbansal727).
 
@@ -13,7 +13,7 @@ Sales reps spend 2–3 hours per prospect manually researching companies, writin
 1. **Paste your product URL** → AI scrapes and extracts your product profile automatically
 2. **Enter a company name + contact** → AI researches the prospect, writes a personalised cold email and LinkedIn note, and recommends the best send time
 3. **Review the draft** → You approve before anything is sent
-4. **One click to send** → Email delivered via Resend with CAN-SPAM compliance
+4. **One click to send** → Email delivered via Resend
 
 **Working at scale?** Upload a CSV of up to 20 prospects on the **Batch** page: research runs in parallel across all of them (LangGraph `Send()` fan-out), then personalised drafts are written one by one — with a live progress view ("Research: 18/20 · Personalizing: 6/20"). Each prospect lands in the same Result page for review and send.
 
